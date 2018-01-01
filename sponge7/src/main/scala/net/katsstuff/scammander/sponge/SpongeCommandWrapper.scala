@@ -13,7 +13,7 @@ import org.spongepowered.api.world.{Location, World}
 
 import net.katsstuff.scammander.ScammanderHelper
 
-case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: SpongeCommandExtra)
+case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], extra: SpongeCommandInfo)
     extends CommandCallable {
 
   override def process(source: CommandSource, arguments: String): CommandResult = {

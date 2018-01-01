@@ -8,9 +8,9 @@ package object sponge extends ScammanderUniverse[CommandSource, Unit] {
     sender.hasPermission(permission)
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) extends AnyVal {
-    def toSponge(extra: SpongeCommandExtra): SpongeCommand[Sender, Param] = SpongeCommand(command, extra)
+    def toSponge(extra: SpongeCommandInfo): SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, extra)
 
-    def register(plugin: AnyRef, extra: SpongeCommandExtra, aliases: Seq[String]): Option[CommandMapping] =
+    def register(plugin: AnyRef, extra: SpongeCommandInfo, aliases: Seq[String]): Option[CommandMapping] =
       toSponge(extra).register(plugin, aliases)
   }
 
