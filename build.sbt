@@ -16,7 +16,7 @@ lazy val common = project.settings(
   commonSettings,
   name := "scammander",
   version := "0.1",
-  libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.2"
+  libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
 )
 
 lazy val sponge7 = project.settings(
@@ -24,5 +24,5 @@ lazy val sponge7 = project.settings(
   name := "scammander-sponge7",
   version := "0.1",
   resolvers += "Sponge" at "http://repo.spongepowered.org/maven",
-  libraryDependencies += "org.spongepowered" % "spongeapi" %"7.0.0-SNAPSHOT"
+  libraryDependencies += "org.spongepowered" % "spongeapi" %"7.0.0"
 ).dependsOn(common)
