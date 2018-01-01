@@ -52,7 +52,14 @@ case class BukkitCommandWrapper[Sender, Param](command: Command[Sender, Param]) 
   ): util.List[String] = {
     command.userValidator
       .validate(sender)
-      .map(command.suggestions(_, ScammanderHelper.stringToRawArgs(args.mkString(" "))))
+      .map(
+        source =>
+          command.suggestions(
+            source,
+            BukkitExtra(bukkitCommand, alias),
+            ScammanderHelper.stringToRawArgs(args.mkString(" "))
+        )
+      )
       .getOrElse(Nil)
       .asJava
   }

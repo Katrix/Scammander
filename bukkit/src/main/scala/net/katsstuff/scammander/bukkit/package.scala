@@ -4,7 +4,7 @@ import org.bukkit.command.CommandSender
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 
-package object bukkit extends ScammanderUniverse[CommandSender, BukkitExtra] {
+package object bukkit extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
   override def hasSenderPermission(sender: CommandSender, permission: String): Boolean =
     sender.hasPermission(permission)
 

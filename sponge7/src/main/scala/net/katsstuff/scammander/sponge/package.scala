@@ -2,8 +2,9 @@ package net.katsstuff.scammander
 
 import org.spongepowered.api.command.{CommandMapping, CommandSource}
 import org.spongepowered.api.entity.living.player.Player
+import org.spongepowered.api.world.{Location, World}
 
-package object sponge extends ScammanderUniverse[CommandSource, Unit] {
+package object sponge extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
   override def hasSenderPermission(sender: CommandSource, permission: String): Boolean =
     sender.hasPermission(permission)
 

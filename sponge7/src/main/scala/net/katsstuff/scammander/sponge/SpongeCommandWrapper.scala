@@ -47,7 +47,7 @@ case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], 
   ): util.List[String] =
     command.userValidator
       .validate(source)
-      .map(command.suggestions(_, ScammanderHelper.stringToRawArgs(arguments)))
+      .map(source => command.suggestions(source, targetPosition, ScammanderHelper.stringToRawArgs(arguments)))
       .getOrElse(Nil)
       .asJava
 
