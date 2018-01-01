@@ -11,21 +11,34 @@ import org.spongepowered.api.command.{CommandCallable, CommandException, Command
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
+import net.katsstuff.scammander.misc.RawCmdArg
+
 case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: SpongeCommandExtra)
     extends CommandCallable {
+
+  private val spaceRegex = """\S+""".r //TODO: Support quoted arguments
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val res = for {
       sender <- command.userValidator.validate(source)
-      param  <- command.par.parse(source, (), arguments.split(" ").toList)
+      param  <- command.par.parse(source, (), toRawArgs(arguments))
     } yield command.run(sender, (), param._2)
 
     res.merge match {
-      case CmdSuccess(count)    => CommandResult.successCount(count)
-      case CmdError(msg)        => throw new CommandException(Text.of(msg))
-      case CmdSyntaxError(msg)  => throw new ArgumentParseException(Text.of(msg), arguments, ???)
-      case CmdUsageError(msg)   => throw new ArgumentParseException(Text.of(msg), arguments, ???) //TODO: Custom exception
-      case e: MultipleCmdErrors => throw new CommandException(Text.of(e.msg))
+      case CmdSuccess(count) => CommandResult.successCount(count)
+      case CmdError(msg)     => throw new CommandException(Text.of(msg))
+      case CmdSyntaxError(msg, pos) =>
+        val e =
+          if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
+          else new CommandException(Text.of(msg))
+        throw e
+      case CmdUsageError(msg, pos) =>
+        //TODO: Custom exception
+        val e =
+          if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
+          else new CommandException(Text.of(msg))
+        throw e
+      case e: MultipleCmdErrors => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
     }
   }
 
@@ -36,7 +49,7 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
   ): util.List[String] =
     command.userValidator
       .validate(source)
-      .map(command.suggestions(_, arguments.split(" ").toList))
+      .map(command.suggestions(_, toRawArgs(arguments)))
       .getOrElse(Nil)
       .asJava
 
@@ -58,4 +71,7 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
     val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)
     if (res.isPresent) Some(res.get()) else None
   }
+
+  private def toRawArgs(arguments: String): List[RawCmdArg] =
+    spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 }
