@@ -27,7 +27,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   sealed trait CmdResult
   object CmdResult {
     def success(count: Int = 1): CmdSuccess = CmdSuccess(count)
-    def error(msg: String): CmdError = CmdError(msg)
+    def error(msg: String):      CmdError   = CmdError(msg)
   }
   case class CmdSuccess(count: Int) extends CmdResult
   sealed trait CmdFailure extends CmdResult {
@@ -82,7 +82,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   object Parameter {
-    def apply[A](implicit tpe: Parameter[A]): Parameter[A] = tpe
+    def apply[A](implicit param: Parameter[A]): Parameter[A] = param
   }
 
   case class Named[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S]) extends ProxyParameter[A, A] {
@@ -115,7 +115,11 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       } else Left(CmdSyntaxError("Not enough parameters", -1))
     }
 
-    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+    override def suggestions(
+        source: RootSender,
+        extra: TabExtra,
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = {
       val head = xs.head
       val tail = xs.tail
 
@@ -175,6 +179,26 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       }
   }
 
+  case class RemainingAsString(string: String) {
+    override def toString: String = string
+    override def hashCode(): Int = string.hashCode
+    override def equals(obj: scala.Any): Boolean = string.equals(obj)
+  }
+
+  implicit val remainingAsStringParam: Parameter[RemainingAsString] = new Parameter[RemainingAsString] {
+    override def name = "strings..."
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): Either[CmdFailure, (List[RawCmdArg], RemainingAsString)] =
+      Right((Nil, RemainingAsString(xs.map(_.content).mkString(" "))))
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (Nil, Nil)
+  }
+
   class AllOff[A]
   /*TODO: Find way to use Option class instead
     class Optional[A]
@@ -197,7 +221,11 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
           Try(s(xs.head.content)).map(xs.tail -> _).toEither.left.map(e => CmdSyntaxError(e.getMessage, xs.head.start))
         else Left(CmdSyntaxError("Not enough parameters", -1))
 
-      override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
     }
 
   def mkSingle[A](
@@ -216,7 +244,11 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
         if (xs.nonEmpty) parser(xs.head.content).map(xs.tail -> _)
         else Left(CmdSyntaxError("Not enough parameters", -1))
 
-      override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = {
         val head = xs.head
         val tail = xs.tail
 
@@ -238,7 +270,20 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
     extends ParameterDeriver[RootSender, RunExtra, TabExtra] {
   self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
 
+  implicit def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Parameter[Gen]): Parameter[A] =
+    new ProxyParameter[A, Gen] {
+      override def param: Parameter[Gen] = genParam
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): Either[CmdFailure, (List[RawCmdArg], A)] =
+        genParam.parse(source, extra, xs).map(t => t._1 -> gen.from(t._2))
+    }
+
   implicit def hConsLabelledParam[HK <: Symbol, HV, T <: HList](
+      implicit
       hName: Witness.Aux[HK],
       hParam: Lazy[Parameter[HV]],
       tParam: Lazy[Parameter[T]]
@@ -257,7 +302,11 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
         } yield (Nil, labelled.field[HK](t1._2) :: t2._2)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = {
         val (ys, h)   = hParam.value.suggestions(source, extra, xs)
         val (rest, t) = tParam.value.suggestions(source, extra, ys)
 
@@ -265,36 +314,45 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
       }
     }
 
-  implicit def cConsLabelledParam[HK <: Symbol, HV, T <: HList](
+  implicit def cConsLabelledParam[HK <: Symbol, HV, T <: Coproduct](
+      implicit
       hName: Witness.Aux[HK],
       hParam: Lazy[Parameter[HV]],
       tParam: Lazy[Parameter[T]]
-  ): Parameter[FieldType[HK, HV] :: T] =
-    new Parameter[FieldType[HK, HV] :: T] {
+  ): Parameter[FieldType[HK, HV] :+: T] =
+    new Parameter[FieldType[HK, HV] :+: T] {
       override def name: String = s"${hName.value.name}|${tParam.value.name}"
 
       override def parse(
           source: RootSender,
           extra: RunExtra,
           xs: List[RawCmdArg]
-      ): Either[CmdFailure, (List[RawCmdArg], ::[FieldType[HK, HV], T])] = {
+      ): Either[CmdFailure, (List[RawCmdArg], FieldType[HK, HV] :+: T)] = {
         for {
-          t1 <- hParam.value.parse(source, extra, xs)
-          t2 <- tParam.value.parse(source, extra, t1._1)
-        } yield (Nil, labelled.field[HK](t1._2) :: t2._2)
+          e1 <- hParam.value.parse(source, extra, xs).map { case (ys, h) => ys -> Inl(labelled.field[HK](h)) }.left
+          e2 <- tParam.value.parse(source, extra, xs).map { case (ys, t) => ys -> Inr(t) }.left
+        } yield e1.merge(e2)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
-        val (ys, h)   = hParam.value.suggestions(source, extra, xs)
-        val (rest, t) = tParam.value.suggestions(source, extra, ys)
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = {
+        val (hRest, h) = hParam.value.suggestions(source, extra, xs)
+        val (tRest, t) = tParam.value.suggestions(source, extra, xs)
 
+        val rest = if (hRest.size > tRest.size) hRest else tRest
         (rest, h ++ t)
       }
     }
 }
 
 trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
-  implicit def hConsParam[H, T <: HList](hParam: Lazy[Parameter[H]], tParam: Lazy[Parameter[T]]): Parameter[H :: T] =
+  implicit def hConsParam[H, T <: HList](
+      implicit hParam: Lazy[Parameter[H]],
+      tParam: Lazy[Parameter[T]]
+  ): Parameter[H :: T] =
     new Parameter[H :: T] {
       override def name: String = s"${hParam.value.name} ${tParam.value.name}"
 
@@ -309,7 +367,11 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
         } yield (Nil, t1._2 :: t2._2)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = {
         val (ys, h)   = hParam.value.suggestions(source, extra, xs)
         val (rest, t) = tParam.value.suggestions(source, extra, ys)
 
@@ -327,7 +389,8 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
     ): Either[CmdFailure, (List[RawCmdArg], HNil)] =
       Right((xs, HNil))
 
-    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = (xs, Nil)
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (xs, Nil)
   }
 
   implicit def cConsParam[H, T <: Coproduct](
@@ -348,7 +411,11 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
         } yield e1.merge(e2)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = {
         val (hRest, h) = hParam.value.suggestions(source, extra, xs)
         val (tRest, t) = tParam.value.suggestions(source, extra, xs)
 
@@ -367,6 +434,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
     ): Either[CmdFailure, (List[RawCmdArg], CNil)] =
       sys.error("CNil")
 
-    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = (xs, Nil)
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (xs, Nil)
   }
 }
