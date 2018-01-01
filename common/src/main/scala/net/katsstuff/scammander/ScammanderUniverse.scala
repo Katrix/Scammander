@@ -25,6 +25,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   sealed trait CmdResult
+  object CmdResult {
+    def success(count: Int = 1): CmdSuccess = CmdSuccess(count)
+    def error(msg: String): CmdError = CmdError(msg)
+  }
   case class CmdSuccess(count: Int) extends CmdResult
   sealed trait CmdFailure extends CmdResult {
     def msg: String

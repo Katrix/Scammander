@@ -13,7 +13,7 @@ import org.spongepowered.api.world.{Location, World}
 
 import net.katsstuff.scammander.ScammanderHelper
 
-case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], extra: SpongeCommandInfo)
+case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
     extends CommandCallable {
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
@@ -51,14 +51,14 @@ case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], 
       .getOrElse(Nil)
       .asJava
 
-  override def testPermission(source: CommandSource): Boolean = source.hasPermission(extra.permission)
+  override def testPermission(source: CommandSource): Boolean = info.permission.forall(source.hasPermission)
 
-  override def getShortDescription(source: CommandSource): Optional[Text] = extra.shortDescription(source) match {
+  override def getShortDescription(source: CommandSource): Optional[Text] = info.shortDescription(source) match {
     case Some(description) => Optional.of(description)
     case None              => Optional.empty()
   }
 
-  override def getHelp(source: CommandSource): Optional[Text] = extra.help(source) match {
+  override def getHelp(source: CommandSource): Optional[Text] = info.help(source) match {
     case Some(help) => Optional.of(help)
     case None       => Optional.empty()
   }
