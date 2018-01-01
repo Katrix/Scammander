@@ -14,11 +14,11 @@ package object sponge extends ScammanderUniverse[CommandSource, Unit] {
       toSponge(extra).register(plugin, aliases)
   }
 
-  implicit val playerSender: SenderTransformer[Player] = SenderTransformer.mkTransformer {
+  implicit val playerSender: UserValidator[Player] = UserValidator.mkTransformer {
     case player: Player => Right(player)
     case _              => Left(CmdError(""))
   }(identity)
 
-  implicit val commandSourceSender: SenderTransformer[CommandSource] =
-    SenderTransformer.mkTransformer(Right.apply)(identity)
+  implicit val commandSourceSender: UserValidator[CommandSource] =
+    UserValidator.mkTransformer(Right.apply)(identity)
 }

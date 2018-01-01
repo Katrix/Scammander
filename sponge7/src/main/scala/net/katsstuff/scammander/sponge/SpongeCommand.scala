@@ -15,7 +15,7 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val res = for {
-      sender <- command.senderTransformer.validate(source)
+      sender <- command.userValidator.validate(source)
       param  <- command.par.parse(source, (), arguments.split(" ").toList).left.map(CmdError)
     } yield command.run(sender, (), param._2)
 
@@ -29,7 +29,12 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
       source: CommandSource,
       arguments: String,
       targetPosition: Location[World]
-  ): util.List[String] = command.par.suggestions(source, arguments.split(" ").toList)._2.asJava
+  ): util.List[String] =
+    command.userValidator
+      .validate(source)
+      .map(command.suggestions(_, arguments.split(" ").toList))
+      .getOrElse(Nil)
+      .asJava
 
   override def testPermission(source: CommandSource): Boolean = source.hasPermission(extra.permission)
 
@@ -43,7 +48,7 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
     case None       => Optional.empty()
   }
 
-  override def getUsage(source: CommandSource): Text = Text.of(command.par.usage)
+  override def getUsage(source: CommandSource): Text = Text.of(command.usage(source))
 
   def register(plugin: AnyRef, aliases: Seq[String]): Option[CommandMapping] = {
     val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)
