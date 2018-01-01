@@ -11,17 +11,15 @@ import org.spongepowered.api.command.{CommandCallable, CommandException, Command
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
-import net.katsstuff.scammander.misc.RawCmdArg
+import net.katsstuff.scammander.ScammanderHelper
 
 case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: SpongeCommandExtra)
     extends CommandCallable {
 
-  private val spaceRegex = """\S+""".r //TODO: Support quoted arguments
-
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val res = for {
       sender <- command.userValidator.validate(source)
-      param  <- command.par.parse(source, (), toRawArgs(arguments))
+      param  <- command.par.parse(source, (), ScammanderHelper.stringToRawArgs(arguments))
     } yield command.run(sender, (), param._2)
 
     res.merge match {
@@ -49,7 +47,7 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
   ): util.List[String] =
     command.userValidator
       .validate(source)
-      .map(command.suggestions(_, toRawArgs(arguments)))
+      .map(command.suggestions(_, ScammanderHelper.stringToRawArgs(arguments)))
       .getOrElse(Nil)
       .asJava
 
@@ -71,7 +69,4 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
     val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)
     if (res.isPresent) Some(res.get()) else None
   }
-
-  private def toRawArgs(arguments: String): List[RawCmdArg] =
-    spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 }
