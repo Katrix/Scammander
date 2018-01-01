@@ -12,14 +12,14 @@ trait ScammanderUniverse[RootSender, CmdCtx]
 
   trait UserValidator[A] {
 
-    def validate(sender: RootSender): Either[CmdError, A]
+    def validate(sender: RootSender): Either[CmdFailure, A]
 
     def toSender(a: A): RootSender
   }
   object UserValidator {
-    def mkTransformer[A](validator: RootSender => Either[CmdError, A])(back: A => RootSender): UserValidator[A] =
+    def mkTransformer[A](validator: RootSender => Either[CmdFailure, A])(back: A => RootSender): UserValidator[A] =
       new UserValidator[A] {
-        override def validate(sender: RootSender): Either[CmdError, A] = validator(sender)
+        override def validate(sender: RootSender): Either[CmdFailure, A] = validator(sender)
         override def toSender(a: A):               RootSender          = back(a)
       }
   }

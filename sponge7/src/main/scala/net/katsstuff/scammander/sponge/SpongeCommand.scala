@@ -6,6 +6,7 @@ import java.util.Optional
 import scala.collection.JavaConverters._
 
 import org.spongepowered.api.Sponge
+import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.command.{CommandCallable, CommandException, CommandMapping, CommandResult, CommandSource}
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
@@ -16,12 +17,15 @@ case class SpongeCommand[Sender, Param](command: Command[Sender, Param], extra: 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val res = for {
       sender <- command.userValidator.validate(source)
-      param  <- command.par.parse(source, (), arguments.split(" ").toList).left.map(CmdError)
+      param  <- command.par.parse(source, (), arguments.split(" ").toList)
     } yield command.run(sender, (), param._2)
 
     res.merge match {
-      case CmdSuccess(count) => CommandResult.successCount(count)
-      case CmdError(msg)     => throw new CommandException(Text.of(msg))
+      case CmdSuccess(count)    => CommandResult.successCount(count)
+      case CmdError(msg)        => throw new CommandException(Text.of(msg))
+      case CmdSyntaxError(msg)  => throw new ArgumentParseException(Text.of(msg), arguments, ???)
+      case CmdUsageError(msg)   => throw new ArgumentParseException(Text.of(msg), arguments, ???) //TODO: Custom exception
+      case e: MultipleCmdErrors => throw new CommandException(Text.of(e.msg))
     }
   }
 
