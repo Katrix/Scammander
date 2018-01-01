@@ -282,8 +282,7 @@ trait ParameterDeriver[RootSender, CmdCtx] { self: ScammanderUniverse[RootSender
     override def name: String = ""
 
     override def parse(source: RootSender, ctx: CmdCtx, xs: List[String]): Either[CmdFailure, (List[String], HNil)] =
-      if (xs.isEmpty) Right((Nil, HNil))
-      else Left(CmdSyntaxError(s"Too many arguments:\n${xs.mkString(", ")}"))
+      Right((xs, HNil))
 
     override def suggestions(source: RootSender, xs: List[String]): (List[String], Seq[String]) = (xs, Nil)
   }
