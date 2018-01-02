@@ -54,7 +54,14 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     def usage(source: RootSender): String = par.usage(source)
   }
   object Command {
-    def simple[Sender, Param](
+    def simple[Param](
+        runCmd: (RootSender, RunExtra, Param) => CmdResult
+    )(implicit parameter: Parameter[Param]): Command[RootSender, Param] =
+      new Command[RootSender, Param] {
+        override def run(source: RootSender, extra: RunExtra, arg: Param): CmdResult = runCmd(source, extra, arg)
+      }
+
+    def withSender[Sender, Param](
         runCmd: (Sender, RunExtra, Param) => CmdResult
     )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
       new Command[Sender, Param] {
@@ -182,8 +189,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   case class RemainingAsString(string: String) {
-    override def toString: String = string
-    override def hashCode(): Int = string.hashCode
+    override def toString:               String  = string
+    override def hashCode():             Int     = string.hashCode
     override def equals(obj: scala.Any): Boolean = string.equals(obj)
   }
 
