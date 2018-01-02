@@ -30,6 +30,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     extends NormalParametersInstances[RootSender, RunExtra, TabExtra]
     with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra] {
 
+  //Constants and helpers
+
+  val notEnoughArgs = CmdSyntaxError("Not enough arguments", -1)
+
   trait UserValidator[A] {
 
     def validate(sender: RootSender): Either[CmdFailure, A]
@@ -46,6 +50,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     implicit val rootValidator: UserValidator[RootSender] = mkTransformer(Right.apply)(identity)
   }
 
+  //Results and steps
+
   sealed trait CmdResult
   object CmdResult {
     def success(count: Int = 1): CmdSuccess = CmdSuccess(count)
@@ -61,8 +67,12 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   case class CmdUsageError(msg: String, position: Int)  extends CmdFailure
   case class MultipleCmdErrors(failures: Seq[CmdFailure]) extends CmdFailure {
     override def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(failures :+ failure)
-    override def msg:                        String     = failures.take(5).map(_.msg).mkString("\n")
+
+    //We don't want to show too many errors
+    override def msg: String = failures.take(5).map(_.msg).mkString("\n")
   }
+
+  //Commands and parameters
 
   abstract class Command[Sender, Param](implicit val userValidator: UserValidator[Sender], val par: Parameter[Param]) {
 
@@ -114,6 +124,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     def apply[A](implicit param: Parameter[A]): Parameter[A] = param
   }
 
+  //Helper parameters and modifiers
+
   case class Named[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S]) extends ProxyParameter[A, A] {
     override def name: String = w.value
 
@@ -141,19 +153,11 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
             )
           else Left(CmdUsageError(s"$head is not a valid parameter.", head.start))
         }
-      } else Left(CmdSyntaxError("Not enough parameters", -1))
+      } else Left(notEnoughArgs)
     }
 
-    override def suggestions(
-        source: RootSender,
-        extra: TabExtra,
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = {
-      val head = xs.head
-      val tail = xs.tail
-
-      if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
-    }
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      ScammanderHelper.suggestions(xs, choices)
   }
 
   class ChoicesT[Name <: String, L <: HList, SendValid <: Boolean](
@@ -227,7 +231,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       ): Either[CmdFailure, (List[RawCmdArg], A)] =
         if (xs.nonEmpty)
           Try(s(xs.head.content)).map(xs.tail -> _).toEither.left.map(e => CmdSyntaxError(e.getMessage, xs.head.start))
-        else Left(CmdSyntaxError("Not enough parameters", -1))
+        else Left(notEnoughArgs)
 
       override def suggestions(
           source: RootSender,
@@ -250,18 +254,13 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
           xs: List[RawCmdArg]
       ): Either[CmdFailure, (List[RawCmdArg], A)] =
         if (xs.nonEmpty) parser(xs.head.content).map(xs.tail -> _)
-        else Left(CmdSyntaxError("Not enough parameters", -1))
+        else Left(notEnoughArgs)
 
       override def suggestions(
           source: RootSender,
           extra: TabExtra,
           xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) = {
-        val head = xs.head
-        val tail = xs.tail
-
-        if (tail.isEmpty) (Nil, possibleSuggestions().filter(head.content.startsWith)) else (tail, Nil)
-      }
+      ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, possibleSuggestions())
     }
 
   implicit val bytePar:   Parameter[Byte]    = primitivePar("byte", _.toByte)

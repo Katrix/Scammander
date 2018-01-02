@@ -28,4 +28,11 @@ object ScammanderHelper {
 
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
+
+  def suggestions(xs: List[RawCmdArg], choices: Iterable[String]): (List[RawCmdArg], Seq[String]) = {
+    val head = xs.head
+    val tail = xs.tail
+
+    if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
+  }
 }
