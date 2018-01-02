@@ -26,7 +26,4 @@ package object sponge extends ScammanderUniverse[CommandSource, Unit, Location[W
     case player: Player => Right(player)
     case _              => Left(CmdUsageError("This command can only be used by players", -1))
   }(identity)
-
-  implicit val commandSourceSender: UserValidator[CommandSource] =
-    UserValidator.mkTransformer(Right.apply)(identity)
 }

@@ -22,6 +22,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         override def validate(sender: RootSender): Either[CmdFailure, A] = validator(sender)
         override def toSender(a: A):               RootSender            = back(a)
       }
+
+    implicit val rootValidator: UserValidator[RootSender] = mkTransformer(Right.apply)(identity)
   }
 
   sealed trait CmdResult

@@ -18,7 +18,4 @@ package object bukkit extends ScammanderUniverse[CommandSender, BukkitExtra, Buk
     case player: Player => Right(player)
     case _              => Left(CmdUsageError("This command can only be used by players", -1))
   }(identity)
-
-  implicit val commandSourceSender: UserValidator[CommandSender] =
-    UserValidator.mkTransformer(Right.apply)(identity)
 }
