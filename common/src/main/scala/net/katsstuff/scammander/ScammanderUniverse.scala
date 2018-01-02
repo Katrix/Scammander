@@ -178,16 +178,24 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       param.parse(source, extra, xs)
   }
 
-  case class OnlyOne[A](param: Parameter[Seq[A]]) extends ProxyParameter[A, Seq[A]] {
+  case class OnlyOne[A](value: A)
+  object OnlyOne {
+    implicit def parameter[A](implicit setParam: Parameter[Iterable[A]]): Parameter[A] =
+      new ProxyParameter[A, Iterable[A]] {
+        override def param: Parameter[Iterable[A]] = setParam
 
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): Either[CmdFailure, (List[RawCmdArg], A)] =
-      param.parse(source, extra, xs).flatMap {
-        case (rest, seq) if seq.size == 1 => Right((rest, seq.head))
-        case _                            => Left(CmdUsageError("More than one possible value", xs.headOption.map(_.start).getOrElse(-1)))
+        override def parse(
+            source: RootSender,
+            extra: RunExtra,
+            xs: List[RawCmdArg]
+        ): Either[CmdFailure, (List[RawCmdArg], A)] = {
+          val pos = xs.headOption.map(_.start).getOrElse(-1)
+          param.parse(source, extra, xs).flatMap {
+            case (rest, seq) if seq.size == 1 => Right((rest, seq.head))
+            case (_, seq) if seq.isEmpty      => Left(CmdUsageError("No values found", pos))
+            case _                            => Left(CmdUsageError("More than one possible value", pos))
+          }
+        }
       }
   }
 
