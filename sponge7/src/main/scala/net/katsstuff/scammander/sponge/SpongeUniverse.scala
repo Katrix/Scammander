@@ -12,21 +12,40 @@ import org.spongepowered.api.entity.living.player.Player
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
+import net.katsstuff.scammander.misc.RawCmdArg
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
+import shapeless._
 
 trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
-  override def hasSenderPermission(sender: CommandSource, permission: String): Boolean =
-    sender.hasPermission(permission)
+
+  case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
+      extends ProxyParameter[A, A] {
+    val perm: String = w.value
+
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): Either[CmdFailure, (List[RawCmdArg], A)] =
+      if (source.hasPermission(perm)) param.parse(source, extra, xs)
+      else
+        Left(
+          CmdUsageError(
+            "You do not have the permissions needed to use this parameter",
+            xs.headOption.map(_.start).getOrElse(-1)
+          )
+        )
+  }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toSponge(info: CommandInfo): SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, info)
 
     def register(
-      plugin: AnyRef,
-      aliases: Seq[String],
-      permission: Option[String] = None,
-      help: CommandSource => Option[Text] = _ => None,
-      shortDescription: CommandSource => Option[Text] = _ => None
+        plugin: AnyRef,
+        aliases: Seq[String],
+        permission: Option[String] = None,
+        help: CommandSource => Option[Text] = _ => None,
+        shortDescription: CommandSource => Option[Text] = _ => None
     ): Option[CommandMapping] =
       toSponge(CommandInfo(permission, help, shortDescription)).register(plugin, aliases)
   }
@@ -37,7 +56,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   }(identity)
 
   case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
-    extends CommandCallable {
+      extends CommandCallable {
 
     override def process(source: CommandSource, arguments: String): CommandResult = {
       val res = for {
@@ -64,9 +83,9 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     }
 
     override def getSuggestions(
-      source: CommandSource,
-      arguments: String,
-      targetPosition: Location[World]
+        source: CommandSource,
+        arguments: String,
+        targetPosition: Location[World]
     ): util.List[String] =
       command.userValidator
         .validate(source)
@@ -94,4 +113,3 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     }
   }
 }
-

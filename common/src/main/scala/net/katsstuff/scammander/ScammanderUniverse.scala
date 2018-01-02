@@ -154,27 +154,6 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       param.parse(source, extra, xs)
   }
 
-  case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
-      extends ProxyParameter[A, A] {
-    val perm: String = w.value
-
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): Either[CmdFailure, (List[RawCmdArg], A)] =
-      if (hasSenderPermission(source, perm)) param.parse(source, extra, xs)
-      else
-        Left(
-          CmdUsageError(
-            "You do not have the permissions needed to use this parameter",
-            xs.headOption.map(_.start).getOrElse(-1)
-          )
-        )
-  }
-
-  def hasSenderPermission(sender: RootSender, permission: String): Boolean
-
   case class OnlyOne[A](param: Parameter[Seq[A]]) extends ProxyParameter[A, Seq[A]] {
 
     override def parse(

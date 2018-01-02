@@ -9,11 +9,30 @@ import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.entity.Player
 import org.bukkit.plugin.java.JavaPlugin
 
+import net.katsstuff.scammander.misc.RawCmdArg
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
+import shapeless._
 
 trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
-  override def hasSenderPermission(sender: CommandSender, permission: String): Boolean =
-    sender.hasPermission(permission)
+
+  case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
+      extends ProxyParameter[A, A] {
+    val perm: String = w.value
+
+    override def parse(
+        source: CommandSender,
+        extra: BukkitExtra,
+        xs: List[RawCmdArg]
+    ): Either[CmdFailure, (List[RawCmdArg], A)] =
+      if (source.hasPermission(perm)) param.parse(source, extra, xs)
+      else
+        Left(
+          CmdUsageError(
+            "You do not have the permissions needed to use this parameter",
+            xs.headOption.map(_.start).getOrElse(-1)
+          )
+        )
+  }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toBukkit: BukkitCommandWrapper[Sender, Param] = BukkitCommandWrapper(command)
@@ -29,10 +48,10 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
   case class BukkitCommandWrapper[Sender, Param](command: Command[Sender, Param]) extends TabExecutor {
 
     override def onCommand(
-      source: CommandSender,
-      bukkitCommand: BukkitCommand,
-      label: String,
-      args: Array[String]
+        source: CommandSender,
+        bukkitCommand: BukkitCommand,
+        label: String,
+        args: Array[String]
     ): Boolean = {
       val extra = BukkitExtra(bukkitCommand, label)
 
@@ -61,10 +80,10 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
     }
 
     override def onTabComplete(
-      sender: CommandSender,
-      bukkitCommand: BukkitCommand,
-      alias: String,
-      args: Array[String]
+        sender: CommandSender,
+        bukkitCommand: BukkitCommand,
+        alias: String,
+        args: Array[String]
     ): util.List[String] = {
       command.userValidator
         .validate(sender)
@@ -74,7 +93,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
               source,
               BukkitExtra(bukkitCommand, alias),
               ScammanderHelper.stringToRawArgs(args.mkString(" "))
-            )
+          )
         )
         .getOrElse(Nil)
         .asJava
