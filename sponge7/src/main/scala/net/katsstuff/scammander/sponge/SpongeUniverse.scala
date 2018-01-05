@@ -29,16 +29,19 @@ import scala.collection.JavaConverters._
 
 import org.spongepowered.api.{CatalogType, Sponge}
 import org.spongepowered.api.command.args.{ArgumentParseException, GenericArguments}
-import org.spongepowered.api.command.{CommandCallable, CommandException, CommandMapping, CommandResult => SpongeCommandResult, CommandSource}
+import org.spongepowered.api.command.source.ProxySource
+import org.spongepowered.api.command._
+import org.spongepowered.api.command.{CommandResult => SpongeCommandResult}
 import org.spongepowered.api.data.DataContainer
 import org.spongepowered.api.entity.Entity
 import org.spongepowered.api.entity.living.player.{Player, User}
 import org.spongepowered.api.plugin.PluginContainer
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.text.selector.Selector
+import org.spongepowered.api.util.blockray.{BlockRay, BlockRayHit}
 import org.spongepowered.api.world.{Location, World}
 
-import com.flowpowered.math.vector.Vector3d
+import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
 import net.katsstuff.scammander.misc.RawCmdArg
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
@@ -76,11 +79,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       extends ProxyParameter[A, A] {
     val perm: String = w.value
 
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], A)] =
+    override def parse(source: CommandSource, extra: Unit, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
       if (source.hasPermission(perm)) param.parse(source, extra, xs)
       else
         Left(
@@ -179,6 +178,76 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
   //TODO: orSource, orTarget, text
 
+  trait Targeter[A] {
+    def getTarget(source: CommandSource, pos: Int): CommandStep[A]
+  }
+  object Targeter {
+    implicit def entityTargeter[A <: Entity](implicit typeable: Typeable[A]): Targeter[A] = new Targeter[A] {
+      private val EntityCase = TypeCase[A]
+
+      override def getTarget(source: CommandSource, pos: Int): CommandStep[A] = {
+        entitySender[Entity].validate(source).flatMap { entity =>
+          val target = entity.getWorld
+            .getIntersectingEntities(entity, 10)
+            .asScala
+            .collect {
+              case hit if hit.getEntity != entity => hit.getEntity
+            }
+            .collectFirst {
+              case EntityCase(e) => e
+            }
+
+          target.toRight(Command.usageError("Not looking at an entity", pos))
+        }
+      }
+    }
+
+    implicit def blockHitTargeter: Targeter[BlockRayHit[World]] = (source: CommandSource, pos: Int) => {
+      entitySender[Entity].validate(source).flatMap { entity =>
+        val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
+
+        res.toRight(Command.usageError("Not looking at an block", pos))
+      }
+    }
+
+    implicit def locationTargeter: Targeter[Location[World]] = (source: CommandSource, pos: Int) => {
+      blockHitTargeter.getTarget(source, pos).map(_.getLocation)
+    }
+
+    implicit def vector3iTargeter: Targeter[Vector3i] = (source: CommandSource, pos: Int) => {
+      blockHitTargeter.getTarget(source, pos).map(_.getBlockPosition)
+    }
+
+    implicit def vector3dTargeter: Targeter[Vector3d] = (source: CommandSource, pos: Int) => {
+      blockHitTargeter.getTarget(source, pos).map(_.getPosition)
+    }
+  }
+
+  sealed trait Target
+  type OrTarget[Base] = Base Or Target
+  implicit def orTargetParam[Base](
+      implicit parameter: Parameter[Base],
+      targeter: Targeter[Base]
+  ): Parameter[OrTarget[Base]] = new ProxyParameter[OrTarget[Base], Base] {
+    override def param: Parameter[Base] = parameter
+
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], OrTarget[Base])] = {
+      val ret = parameter.parse(source, extra, xs).left.flatMap { e1 =>
+        val res = targeter.getTarget(source, xs.headOption.map(_.start).getOrElse(-1)).left.map { e2 =>
+          e1.merge(e2)
+        }
+
+        res.map(xs -> _)
+      }
+
+      ret.map(t => t._1 -> Or(t._2))
+    }
+  }
+
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toSponge(info: CommandInfo): SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, info)
 
@@ -193,9 +262,23 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   }
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkTransformer {
-    case player: Player => Right(player)
-    case _              => Left(CommandUsageError("This command can only be used by players", -1))
+    case player: Player     => Right(player)
+    case proxy: ProxySource => playerSender.validate(proxy.getOriginalSource)
+    case _                  => Left(CommandUsageError("This command can only be used by players", -1))
   }(identity)
+
+  implicit def entitySender[A <: Entity: Typeable]: UserValidator[A] = {
+    val EntityCase = TypeCase[A]
+
+    UserValidator.mkTransformer {
+      case EntityCase(entity) => Right(entity)
+      case proxy: ProxySource => entitySender.validate(proxy.getOriginalSource)
+      case _                  => Left(CommandUsageError("This command can only be used by players", -1))
+    } {
+      case source: CommandSource => source
+      case _                     => throw new IllegalStateException("Tried to convert non sender to sender using UserValidator")
+    }
+  }
 
   case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
       extends CommandCallable {
@@ -208,7 +291,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
       res.merge match {
         case CommandSuccess(count) => SpongeCommandResult.successCount(count)
-        case CommandError(msg) => throw new CommandException(Text.of(msg))
+        case CommandError(msg)     => throw new CommandException(Text.of(msg))
         case CommandSyntaxError(msg, pos) =>
           val e =
             if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)

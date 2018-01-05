@@ -256,7 +256,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
             val (ys, suggestions) = param.suggestions(source, extra, xs)
 
             //FIXME: This breaks for values that don't have any suggestions
-            if(suggestions.isEmpty) inner(xs, finished = true) else inner(ys, finished = false)
+            if (suggestions.isEmpty) inner(xs, finished = true) else inner(ys, finished = false)
           }
         }
 
@@ -267,7 +267,32 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   /*TODO: Find way to use Option class instead
     class Optional[A]
     class OptionalWeak[A]
- */
+   */
+
+  //Or parameter
+  case class Or[Base, TargetType](value: Base)
+  sealed trait Source
+  type OrSource[Base] = Base Or Source
+
+  implicit def orSource[Base](
+      implicit parameter: Parameter[Base],
+      validator: UserValidator[Base]
+  ): Parameter[OrSource[Base]] =
+    new ProxyParameter[OrSource[Base], Base] {
+      override def param: Parameter[Base] = parameter
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], OrSource[Base])] = {
+        val res = param.parse(source, extra, xs).left.flatMap { e1 =>
+          validator.validate(source).map(xs -> _).left.map(e2 => e1.merge(e2))
+        }
+
+        res.map(t => t._1 -> Or(t._2))
+      }
+    }
 }
 
 trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
