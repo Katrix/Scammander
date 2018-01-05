@@ -20,6 +20,7 @@
  */
 package net.katsstuff.scammander
 
+import scala.annotation.tailrec
 import scala.util.Try
 
 import net.katsstuff.scammander
@@ -41,7 +42,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     def mkTransformer[A](validator: RootSender => CommandStep[A])(back: A => RootSender): UserValidator[A] =
       new UserValidator[A] {
         override def validate(sender: RootSender): CommandStep[A] = validator(sender)
-        override def toSender(a: A):               RootSender            = back(a)
+        override def toSender(a: A):               RootSender     = back(a)
       }
 
     implicit val rootValidator: UserValidator[RootSender] = mkTransformer(Right.apply)(identity)
@@ -133,11 +134,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   case class Named[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S]) extends ProxyParameter[A, A] {
     override def name: String = w.value
 
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], A)] =
+    override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
       param.parse(source, extra, xs)
   }
 
@@ -223,7 +220,50 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       (Nil, Nil)
   }
 
-  class AllOff[A]
+  case class AllOff[A](values: Seq[A])
+  object AllOff {
+    implicit def allOfParam[A](implicit param: Parameter[A]): Parameter[AllOff[A]] = new Parameter[AllOff[A]] {
+      override def name: String = s"${param.name}..."
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], AllOff[A])] = {
+        @tailrec
+        def inner(xs: List[RawCmdArg], acc: Seq[A]): CommandStep[AllOff[A]] = {
+          if (xs.isEmpty) Right(AllOff(acc))
+          else {
+            param.parse(source, extra, xs) match {
+              case Right((ys, res)) => inner(ys, acc :+ res)
+              case Left(e)          => Left(e)
+            }
+          }
+        }
+
+        inner(xs, Nil).map(Nil -> _)
+      }
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = {
+        @tailrec
+        def inner(xs: List[RawCmdArg], finished: Boolean): Seq[String] = {
+          if (finished) param.suggestions(source, extra, xs)._2
+          else {
+            val (ys, suggestions) = param.suggestions(source, extra, xs)
+
+            //FIXME: This breaks for values that don't have any suggestions
+            if(suggestions.isEmpty) inner(xs, finished = true) else inner(ys, finished = false)
+          }
+        }
+
+        (Nil, inner(xs, finished = false))
+      }
+    }
+  }
   /*TODO: Find way to use Option class instead
     class Optional[A]
     class OptionalWeak[A]
@@ -236,13 +276,13 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
     new Parameter[A] {
       override def name: String = parName
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], A)] =
+      override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
         if (xs.nonEmpty)
-          Try(s(xs.head.content)).map(xs.tail -> _).toEither.left.map(e => CommandSyntaxError(e.getMessage, xs.head.start))
+          Try(s(xs.head.content))
+            .map(xs.tail -> _)
+            .toEither
+            .left
+            .map(e => CommandSyntaxError(e.getMessage, xs.head.start))
         else Left(ScammanderHelper.notEnoughArgs)
 
       override def suggestions(
@@ -260,11 +300,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
     new Parameter[A] {
       override def name: String = parName
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], A)] =
+      override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
         if (xs.nonEmpty) parser(xs.head.content).map(xs.tail -> _)
         else Left(ScammanderHelper.notEnoughArgs)
 
@@ -293,11 +329,7 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
     new ProxyParameter[A, Gen] {
       override def param: Parameter[Gen] = genParam
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], A)] =
+      override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
         genParam.parse(source, extra, xs).map(t => t._1 -> gen.from(t._2))
     }
 
@@ -401,11 +433,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
   implicit val hNilParam: Parameter[HNil] = new Parameter[HNil] {
     override def name: String = ""
 
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], HNil)] =
+    override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], HNil)] =
       Right((xs, HNil))
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
@@ -446,11 +474,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
   implicit val cNilParam: Parameter[CNil] = new Parameter[CNil] {
     override def name: String = ""
 
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], CNil)] =
+    override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], CNil)] =
       sys.error("CNil")
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
