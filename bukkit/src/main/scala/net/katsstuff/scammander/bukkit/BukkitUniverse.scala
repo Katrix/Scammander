@@ -43,11 +43,11 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         source: CommandSender,
         extra: BukkitExtra,
         xs: List[RawCmdArg]
-    ): Either[CmdFailure, (List[RawCmdArg], A)] =
+    ): CommandStep[(List[RawCmdArg], A)] =
       if (source.hasPermission(perm)) param.parse(source, extra, xs)
       else
         Left(
-          CmdUsageError(
+          CommandUsageError(
             "You do not have the permissions needed to use this parameter",
             xs.headOption.map(_.start).getOrElse(-1)
           )
@@ -69,7 +69,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkTransformer {
     case player: Player => Right(player)
-    case _              => Left(CmdUsageError("This command can only be used by players", -1))
+    case _              => Left(CommandUsageError("This command can only be used by players", -1))
   }(identity)
 
   case class BukkitCommandWrapper[Sender, Param](command: Command[Sender, Param]) extends TabExecutor {
@@ -88,19 +88,19 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
       } yield command.run(sender, extra, param._2)
 
       res.merge match {
-        case CmdSuccess(_) => true
-        case CmdError(msg) =>
+        case CommandSuccess(_) => true
+        case CommandError(msg) =>
           source.sendMessage(ChatColor.RED + msg)
           true
-        case CmdSyntaxError(msg, _) =>
+        case CommandSyntaxError(msg, _) =>
           //TODO: Show error location
           source.sendMessage(ChatColor.RED + msg)
           true
-        case CmdUsageError(msg, _) =>
+        case CommandUsageError(msg, _) =>
           //TODO: Show error location
           source.sendMessage(ChatColor.RED + msg)
           true
-        case e: MultipleCmdErrors =>
+        case e: MultipleCommandErrors =>
           source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
           true
       }

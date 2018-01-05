@@ -20,26 +20,26 @@
  */
 package net.katsstuff.scammander
 
-sealed trait CmdResult
-object CmdResult {
-  def success(count: Int = 1): CmdSuccess = CmdSuccess(count)
-  def error(msg: String):      CmdError   = CmdError(msg)
+sealed trait CommandResult
+object CommandResult {
+  def success(count: Int = 1): CommandSuccess = CommandSuccess(count)
+  def error(msg: String):      CommandError   = CommandError(msg)
 }
-case class CmdSuccess(count: Int) extends CmdResult
-sealed trait CmdFailure extends CmdResult {
+case class CommandSuccess(count: Int = 1) extends CommandResult
+sealed trait CommandFailure extends CommandResult {
   def msg: String
-  def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(Seq(this, failure))
+  def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(Seq(this, failure))
 }
-object CmdFailure {
-  def error(msg: String)                 = CmdError(msg)
-  def syntaxError(msg: String, pos: Int) = CmdSyntaxError(msg, pos)
-  def usageError(msg: String, pos: Int)  = CmdUsageError(msg, pos)
+object CommandFailure {
+  def error(msg: String)                 = CommandError(msg)
+  def syntaxError(msg: String, pos: Int) = CommandSyntaxError(msg, pos)
+  def usageError(msg: String, pos: Int)  = CommandUsageError(msg, pos)
 }
-case class CmdError(msg: String)                      extends CmdFailure
-case class CmdSyntaxError(msg: String, position: Int) extends CmdFailure
-case class CmdUsageError(msg: String, position: Int)  extends CmdFailure
-case class MultipleCmdErrors(failures: Seq[CmdFailure]) extends CmdFailure {
-  override def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(failures :+ failure)
+case class CommandError(msg: String)                      extends CommandFailure
+case class CommandSyntaxError(msg: String, position: Int) extends CommandFailure
+case class CommandUsageError(msg: String, position: Int)  extends CommandFailure
+case class MultipleCommandErrors(failures: Seq[CommandFailure]) extends CommandFailure {
+  override def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(failures :+ failure)
 
   //We don't want to show too many errors
   override def msg: String = failures.take(5).map(_.msg).mkString("\n")

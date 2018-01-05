@@ -26,7 +26,7 @@ object ScammanderHelper {
 
   private val spaceRegex = """\S+""".r //TODO: Support quoted arguments
 
-  val notEnoughArgs = CmdSyntaxError("Not enough arguments", -1)
+  val notEnoughArgs = CommandSyntaxError("Not enough arguments", -1)
 
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
@@ -38,12 +38,12 @@ object ScammanderHelper {
     if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
   }
 
-  def parse[A](name: String, xs: List[RawCmdArg], choices: Map[String, A]): Either[CmdFailure, (List[RawCmdArg], A)] = {
+  def parse[A](name: String, xs: List[RawCmdArg], choices: Map[String, A]): Either[CommandFailure, (List[RawCmdArg], A)] = {
     if (xs.nonEmpty) {
       val head = xs.head
       choices
         .get(head.content)
-        .toRight(CmdUsageError(s"${head.content} is not a valid $name", head.start))
+        .toRight(CommandUsageError(s"${head.content} is not a valid $name", head.start))
         .map(xs.tail -> _)
     } else Left(notEnoughArgs)
   }

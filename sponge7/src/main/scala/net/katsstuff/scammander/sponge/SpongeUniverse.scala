@@ -29,7 +29,7 @@ import scala.collection.JavaConverters._
 
 import org.spongepowered.api.{CatalogType, Sponge}
 import org.spongepowered.api.command.args.{ArgumentParseException, GenericArguments}
-import org.spongepowered.api.command.{CommandCallable, CommandException, CommandMapping, CommandResult, CommandSource}
+import org.spongepowered.api.command.{CommandCallable, CommandException, CommandMapping, CommandResult => SpongeCommandResult, CommandSource}
 import org.spongepowered.api.data.DataContainer
 import org.spongepowered.api.entity.Entity
 import org.spongepowered.api.entity.living.player.{Player, User}
@@ -48,6 +48,30 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
   def optionalToOption[A](optional: Optional[A]): Option[A] = if (optional.isPresent) Some(optional.get()) else None
 
+  //Helpers used when registering command
+
+  object Alias {
+    def apply(single: String):                     Seq[String] = Seq(single)
+    def multiple(first: String, aliases: String*): Seq[String] = first +: aliases
+  }
+
+  object Permission {
+    def apply(perm: String): Some[String] = Some(perm)
+    val none:                None.type    = None
+  }
+
+  object Help {
+    def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
+    def apply(text: Text):               CommandSource => Option[Text] = _ => Some(text)
+    val none:                            CommandSource => None.type    = _ => None
+  }
+
+  object Description {
+    def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
+    def apply(text: Text):               CommandSource => Option[Text] = _ => Some(text)
+    val none:                            CommandSource => None.type    = _ => None
+  }
+
   case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
       extends ProxyParameter[A, A] {
     val perm: String = w.value
@@ -56,11 +80,11 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Unit,
         xs: List[RawCmdArg]
-    ): Either[CmdFailure, (List[RawCmdArg], A)] =
+    ): CommandStep[(List[RawCmdArg], A)] =
       if (source.hasPermission(perm)) param.parse(source, extra, xs)
       else
         Left(
-          CmdUsageError(
+          CommandUsageError(
             "You do not have the permissions needed to use this parameter",
             xs.headOption.map(_.start).getOrElse(-1)
           )
@@ -81,7 +105,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Unit,
         xs: List[RawCmdArg]
-    ): Either[CmdFailure, (List[RawCmdArg], Set[Player])] = {
+    ): CommandStep[(List[RawCmdArg], Set[Player])] = {
       if (xs.nonEmpty) {
         val head = xs.head.content
 
@@ -121,7 +145,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Unit,
         xs: List[RawCmdArg]
-    ): Either[CmdFailure, (List[RawCmdArg], Set[A])] = {
+    ): CommandStep[(List[RawCmdArg], Set[A])] = {
       if (xs.nonEmpty) {
         //TODO: Should an empty check be done here
         val entities = Selector.parse(xs.head.content).resolve(source).asScala.collect {
@@ -151,7 +175,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   implicit val dataContainerParam:               Parameter[DataContainer]   = ???
   implicit val uuidParam:                        Parameter[UUID]            = ???
   implicit val dateTimeParam:                    Parameter[LocalDateTime]   = ??? //OrNow
-  implicit val durationParam:                    Parameter[Duration] = ??? //OrNow
+  implicit val durationParam:                    Parameter[Duration]        = ??? //OrNow
 
   //TODO: orSource, orTarget, text
 
@@ -170,33 +194,33 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkTransformer {
     case player: Player => Right(player)
-    case _              => Left(CmdUsageError("This command can only be used by players", -1))
+    case _              => Left(CommandUsageError("This command can only be used by players", -1))
   }(identity)
 
   case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
       extends CommandCallable {
 
-    override def process(source: CommandSource, arguments: String): CommandResult = {
+    override def process(source: CommandSource, arguments: String): SpongeCommandResult = {
       val res = for {
         sender <- command.userValidator.validate(source)
         param  <- command.par.parse(source, (), ScammanderHelper.stringToRawArgs(arguments))
       } yield command.run(sender, (), param._2)
 
       res.merge match {
-        case CmdSuccess(count) => CommandResult.successCount(count)
-        case CmdError(msg)     => throw new CommandException(Text.of(msg))
-        case CmdSyntaxError(msg, pos) =>
+        case CommandSuccess(count) => SpongeCommandResult.successCount(count)
+        case CommandError(msg) => throw new CommandException(Text.of(msg))
+        case CommandSyntaxError(msg, pos) =>
           val e =
             if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
             else new CommandException(Text.of(msg))
           throw e
-        case CmdUsageError(msg, pos) =>
+        case CommandUsageError(msg, pos) =>
           //TODO: Custom exception
           val e =
             if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
             else new CommandException(Text.of(msg))
           throw e
-        case e: MultipleCmdErrors => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
+        case e: MultipleCommandErrors => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
       }
     }
 
