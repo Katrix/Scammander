@@ -60,8 +60,11 @@ Scammander is designed to not be tied down to one specific platform. You can use
 Scammander is still heavily a work in progress project. As such there are many things that are either not working currently, or working poorly. Under you can see some of those, and plans for them.
 - [x] Sponge implementation
 - [x] Bukkit implementation
+- [ ] Bukkit implementation with internal/NMS
 - [ ] Forge implementation
 - [ ] Child commands
+- [ ] Better error messages for non-Sponge
+- [ ] A way to handle X or else source
 - [ ] Even less boilerplate
 - [ ] More stuff I can't remember now
 

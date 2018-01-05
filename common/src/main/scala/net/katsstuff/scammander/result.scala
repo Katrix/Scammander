@@ -20,31 +20,27 @@
  */
 package net.katsstuff.scammander
 
-import net.katsstuff.scammander.misc.RawCmdArg
+sealed trait CmdResult
+object CmdResult {
+  def success(count: Int = 1): CmdSuccess = CmdSuccess(count)
+  def error(msg: String):      CmdError   = CmdError(msg)
+}
+case class CmdSuccess(count: Int) extends CmdResult
+sealed trait CmdFailure extends CmdResult {
+  def msg: String
+  def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(Seq(this, failure))
+}
+object CmdFailure {
+  def error(msg: String)                 = CmdError(msg)
+  def syntaxError(msg: String, pos: Int) = CmdSyntaxError(msg, pos)
+  def usageError(msg: String, pos: Int)  = CmdUsageError(msg, pos)
+}
+case class CmdError(msg: String)                      extends CmdFailure
+case class CmdSyntaxError(msg: String, position: Int) extends CmdFailure
+case class CmdUsageError(msg: String, position: Int)  extends CmdFailure
+case class MultipleCmdErrors(failures: Seq[CmdFailure]) extends CmdFailure {
+  override def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(failures :+ failure)
 
-object ScammanderHelper {
-
-  private val spaceRegex = """\S+""".r //TODO: Support quoted arguments
-
-  val notEnoughArgs = CmdSyntaxError("Not enough arguments", -1)
-
-  def stringToRawArgs(arguments: String): List[RawCmdArg] =
-    spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
-
-  def suggestions(xs: List[RawCmdArg], choices: Iterable[String]): (List[RawCmdArg], Seq[String]) = {
-    val head = xs.head
-    val tail = xs.tail
-
-    if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
-  }
-
-  def parse[A](name: String, xs: List[RawCmdArg], choices: Map[String, A]): Either[CmdFailure, (List[RawCmdArg], A)] = {
-    if (xs.nonEmpty) {
-      val head = xs.head
-      choices
-        .get(head.content)
-        .toRight(CmdUsageError(s"${head.content} is not a valid $name", head.start))
-        .map(xs.tail -> _)
-    } else Left(notEnoughArgs)
-  }
+  //We don't want to show too many errors
+  override def msg: String = failures.take(5).map(_.msg).mkString("\n")
 }

@@ -20,23 +20,33 @@
  */
 package net.katsstuff.scammander.sponge
 
+import java.net.{InetAddress, URL}
+import java.time.{Duration, LocalDateTime}
 import java.util
-import java.util.Optional
+import java.util.{Optional, UUID}
 
 import scala.collection.JavaConverters._
 
-import org.spongepowered.api.Sponge
-import org.spongepowered.api.command.args.ArgumentParseException
+import org.spongepowered.api.{CatalogType, Sponge}
+import org.spongepowered.api.command.args.{ArgumentParseException, GenericArguments}
 import org.spongepowered.api.command.{CommandCallable, CommandException, CommandMapping, CommandResult, CommandSource}
-import org.spongepowered.api.entity.living.player.Player
+import org.spongepowered.api.data.DataContainer
+import org.spongepowered.api.entity.Entity
+import org.spongepowered.api.entity.living.player.{Player, User}
+import org.spongepowered.api.plugin.PluginContainer
 import org.spongepowered.api.text.Text
+import org.spongepowered.api.text.selector.Selector
 import org.spongepowered.api.world.{Location, World}
+
+import com.flowpowered.math.vector.Vector3d
 
 import net.katsstuff.scammander.misc.RawCmdArg
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
 import shapeless._
 
 trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
+
+  def optionalToOption[A](optional: Optional[A]): Option[A] = if (optional.isPresent) Some(optional.get()) else None
 
   case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
       extends ProxyParameter[A, A] {
@@ -55,7 +65,95 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
             xs.headOption.map(_.start).getOrElse(-1)
           )
         )
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) =
+      if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
   }
+
+  implicit val playerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
+    override def name: String = "player"
+
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): Either[CmdFailure, (List[RawCmdArg], Set[Player])] = {
+      if (xs.nonEmpty) {
+        val head = xs.head.content
+
+        //TODO: Should an empty check be done here
+        val players = if (head.startsWith("@")) {
+          Selector.parse(xs.head.content).resolve(source).asScala.collect {
+            case player: Player => player
+          }
+        } else optionalToOption(Sponge.getServer.getPlayer(head)).toSet
+
+        Right((xs.tail, players.toSet))
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = {
+      val head = xs.head
+      val choices =
+        if (head.content.startsWith("@")) Selector.complete(head.content).asScala
+        else Sponge.getServer.getOnlinePlayers.asScala.map(_.getName)
+
+      ScammanderHelper.suggestions(xs, choices)
+    }
+  }
+
+  implicit val onlyOnePlayer: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
+
+  implicit def entityParam[A <: Entity](implicit typeable: Typeable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
+    override def name: String = "entity"
+
+    private val EntityType: TypeCase[A] = TypeCase[A]
+
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): Either[CmdFailure, (List[RawCmdArg], Set[A])] = {
+      if (xs.nonEmpty) {
+        //TODO: Should an empty check be done here
+        val entities = Selector.parse(xs.head.content).resolve(source).asScala.collect {
+          case EntityType(entity) => entity
+        }
+        Right((xs.tail, entities.toSet))
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, Selector.complete(xs.head.content).asScala)
+  }
+
+  implicit val userParam:                        Parameter[User]            = ???
+  implicit val worldParam:                       Parameter[World]           = ???
+  implicit val vector3dParam:                    Parameter[Vector3d]        = ???
+  implicit val locationParam:                    Parameter[Location[World]] = ???
+  implicit def catalogedParam[A <: CatalogType]: Parameter[A]               = ???
+  implicit val pluginParam:                      Parameter[PluginContainer] = ???
+  implicit val urlParam:                         Parameter[URL]             = ???
+  implicit val ipParam:                          Parameter[InetAddress]     = ???
+  implicit val bigDecimalParam:                  Parameter[BigDecimal]      = ???
+  implicit val bigIntParam:                      Parameter[BigInt]          = ???
+  implicit val dataContainerParam:               Parameter[DataContainer]   = ???
+  implicit val uuidParam:                        Parameter[UUID]            = ???
+  implicit val dateTimeParam:                    Parameter[LocalDateTime]   = ??? //OrNow
+  implicit val durationParam:                    Parameter[Duration] = ??? //OrNow
+
+  //TODO: orSource, orTarget, text
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toSponge(info: CommandInfo): SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, info)

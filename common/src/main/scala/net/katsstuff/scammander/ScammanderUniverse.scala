@@ -22,6 +22,7 @@ package net.katsstuff.scammander
 
 import scala.util.Try
 
+import net.katsstuff.scammander
 import net.katsstuff.scammander.misc.{MkHListWitness, RawCmdArg}
 import shapeless.labelled.FieldType
 import shapeless._
@@ -29,10 +30,6 @@ import shapeless._
 trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     extends NormalParametersInstances[RootSender, RunExtra, TabExtra]
     with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra] {
-
-  //Constants and helpers
-
-  val notEnoughArgs = CmdSyntaxError("Not enough arguments", -1)
 
   trait UserValidator[A] {
 
@@ -52,25 +49,25 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
   //Results and steps
 
-  sealed trait CmdResult
-  object CmdResult {
-    def success(count: Int = 1): CmdSuccess = CmdSuccess(count)
-    def error(msg: String):      CmdError   = CmdError(msg)
-  }
-  case class CmdSuccess(count: Int) extends CmdResult
-  sealed trait CmdFailure extends CmdResult {
-    def msg: String
-    def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(Seq(this, failure))
-  }
-  case class CmdError(msg: String)                      extends CmdFailure
-  case class CmdSyntaxError(msg: String, position: Int) extends CmdFailure
-  case class CmdUsageError(msg: String, position: Int)  extends CmdFailure
-  case class MultipleCmdErrors(failures: Seq[CmdFailure]) extends CmdFailure {
-    override def merge(failure: CmdFailure): CmdFailure = MultipleCmdErrors(failures :+ failure)
+  type CmdResult = scammander.CmdResult
+  val CmdResult: scammander.CmdResult.type = scammander.CmdResult
 
-    //We don't want to show too many errors
-    override def msg: String = failures.take(5).map(_.msg).mkString("\n")
-  }
+  type CmdSuccess = scammander.CmdSuccess
+  val CmdSuccess: scammander.CmdSuccess.type = scammander.CmdSuccess
+
+  type CmdFailure = scammander.CmdFailure
+
+  type CmdError = scammander.CmdError
+  val CmdError: scammander.CmdError.type = scammander.CmdError
+
+  type CmdSyntaxError = scammander.CmdSyntaxError
+  val CmdSyntaxError: scammander.CmdSyntaxError.type = scammander.CmdSyntaxError
+
+  type CmdUsageError = scammander.CmdUsageError
+  val CmdUsageError: scammander.CmdUsageError.type = scammander.CmdUsageError
+
+  type MultipleCmdErrors = scammander.MultipleCmdErrors
+  val MultipleCmdErrors: scammander.MultipleCmdErrors.type = scammander.MultipleCmdErrors
 
   //Commands and parameters
 
@@ -138,22 +135,22 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   case class Choices(name: String, choices: Set[String], sendValid: Boolean = false) extends Parameter[String] {
+    private val choiceMap = choices.map(s => s -> s).toMap
+
     override def parse(
         source: RootSender,
         extra: RunExtra,
         xs: List[RawCmdArg]
     ): Either[CmdFailure, (List[RawCmdArg], String)] = {
-      if (xs.nonEmpty) {
-        val head = xs.head
-        if (choices.contains(head.content)) Right((xs.tail, head.content))
-        else {
-          if (sendValid)
-            Left(
-              CmdUsageError(s"$head is not a valid parameter.\nValid parameters: ${choices.mkString(", ")}", head.start)
-            )
-          else Left(CmdUsageError(s"$head is not a valid parameter.", head.start))
+      val res = ScammanderHelper.parse("choice", xs, choiceMap)
+      if (sendValid) {
+        val head = xs.head.content
+        res.left.map {
+          case CmdUsageError(_, pos) =>
+            CmdUsageError(s"$head is not a valid parameter.\nValid parameters: ${choices.mkString(", ")}", pos)
+          case other => other
         }
-      } else Left(notEnoughArgs)
+      } else res
     }
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
@@ -239,7 +236,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       ): Either[CmdFailure, (List[RawCmdArg], A)] =
         if (xs.nonEmpty)
           Try(s(xs.head.content)).map(xs.tail -> _).toEither.left.map(e => CmdSyntaxError(e.getMessage, xs.head.start))
-        else Left(notEnoughArgs)
+        else Left(ScammanderHelper.notEnoughArgs)
 
       override def suggestions(
           source: RootSender,
@@ -262,7 +259,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
           xs: List[RawCmdArg]
       ): Either[CmdFailure, (List[RawCmdArg], A)] =
         if (xs.nonEmpty) parser(xs.head.content).map(xs.tail -> _)
-        else Left(notEnoughArgs)
+        else Left(ScammanderHelper.notEnoughArgs)
 
       override def suggestions(
           source: RootSender,

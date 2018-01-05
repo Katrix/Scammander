@@ -52,6 +52,13 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
             xs.headOption.map(_.start).getOrElse(-1)
           )
         )
+
+    override def suggestions(
+        source: CommandSender,
+        extra: BukkitExtra,
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) =
+      if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
