@@ -20,6 +20,9 @@
  */
 package net.katsstuff.scammander
 
+import java.util.Locale
+import java.util.regex.Pattern
+
 import net.katsstuff.scammander.misc.RawCmdArg
 
 object ScammanderHelper {
@@ -31,20 +34,53 @@ object ScammanderHelper {
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 
-  def suggestions(xs: List[RawCmdArg], choices: Iterable[String]): (List[RawCmdArg], Seq[String]) = {
+  def suggestions(xs: List[RawCmdArg], choices: => Iterable[String]): (List[RawCmdArg], Seq[String]) = {
     val head = xs.head
     val tail = xs.tail
 
     if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
   }
 
-  def parse[A](name: String, xs: List[RawCmdArg], choices: Map[String, A]): Either[CommandFailure, (List[RawCmdArg], A)] = {
+  def parse[A](
+      name: String,
+      xs: List[RawCmdArg],
+      choices: Map[String, A]
+  ): Either[CommandFailure, (List[RawCmdArg], A)] = {
     if (xs.nonEmpty) {
       val head = xs.head
       choices
-        .get(head.content)
+        .get(head.content.toLowerCase(Locale.ROOT))
         .toRight(CommandUsageError(s"${head.content} is not a valid $name", head.start))
         .map(xs.tail -> _)
+    } else Left(notEnoughArgs)
+  }
+
+  //Based on PatternMatchingCommandElement in Sponge
+  def parseMany[A](
+      name: String,
+      xs: List[RawCmdArg],
+      choices: Map[String, A]
+  ): Either[CommandFailure, (List[RawCmdArg], Set[A])] = {
+    def formattedPattern(input: String) = {
+      // Anchor matches to the beginning -- this lets us use find()
+      val usedInput = if (!input.startsWith("^")) s"^$input" else input
+      Pattern.compile(usedInput, Pattern.CASE_INSENSITIVE)
+    }
+
+    if (xs.nonEmpty) {
+      val RawCmdArg(pos, _, unformattedPattern) = xs.head
+
+      val pattern         = formattedPattern(unformattedPattern)
+      val filteredChoices = choices.filterKeys(k => pattern.matcher(k).find())
+      filteredChoices
+        .collectFirst {
+          case (k, v) if k.equalsIgnoreCase(unformattedPattern) => Right(xs.tail -> Set(v))
+        }
+        .getOrElse {
+          if (filteredChoices.nonEmpty) {
+            Right(xs.tail -> filteredChoices.values.toSet)
+          } else Left(CommandUsageError(s"No values present for $unformattedPattern", pos))
+        }
     } else Left(notEnoughArgs)
   }
 }

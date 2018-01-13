@@ -139,7 +139,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   case class Choices(name: String, choices: Set[String], sendValid: Boolean = false) extends Parameter[String] {
-    private val choiceMap = choices.map(s => s -> s).toMap
+    private val choiceMap = choices.map(_.toLowerCase(Locale.ROOT)).map(s => s -> s).toMap
 
     override def parse(
         source: RootSender,
@@ -180,25 +180,23 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   case class OnlyOne[A](value: A)
-  object OnlyOne {
-    implicit def parameter[A](implicit setParam: Parameter[Iterable[A]]): Parameter[A] =
-      new ProxyParameter[A, Iterable[A]] {
-        override def param: Parameter[Iterable[A]] = setParam
+  implicit def onlyOneParam[A](implicit setParam: Parameter[Set[A]]): Parameter[A] =
+    new ProxyParameter[A, Set[A]] {
+      override def param: Parameter[Set[A]] = setParam
 
-        override def parse(
-            source: RootSender,
-            extra: RunExtra,
-            xs: List[RawCmdArg]
-        ): CommandStep[(List[RawCmdArg], A)] = {
-          val pos = xs.headOption.map(_.start).getOrElse(-1)
-          param.parse(source, extra, xs).flatMap {
-            case (rest, seq) if seq.size == 1 => Right((rest, seq.head))
-            case (_, seq) if seq.isEmpty      => Left(CommandUsageError("No values found", pos))
-            case _                            => Left(CommandUsageError("More than one possible value", pos))
-          }
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], A)] = {
+        val pos = xs.headOption.map(_.start).getOrElse(-1)
+        param.parse(source, extra, xs).flatMap {
+          case (rest, seq) if seq.size == 1 => Right((rest, seq.head))
+          case (_, seq) if seq.isEmpty      => Left(CommandUsageError("No values found", pos))
+          case _                            => Left(CommandUsageError("More than one possible value", pos))
         }
       }
-  }
+    }
 
   case class RemainingAsString(string: String) {
     override def toString:               String  = string
