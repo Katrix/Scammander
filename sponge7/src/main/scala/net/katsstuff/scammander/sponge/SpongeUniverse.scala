@@ -21,12 +21,10 @@
 package net.katsstuff.scammander.sponge
 
 import java.io.{BufferedReader, StringReader}
-import java.net.{InetAddress, URL, UnknownHostException}
-import java.time.format.DateTimeParseException
-import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
+import java.net.{InetAddress, UnknownHostException}
 import java.util
+import java.util.Optional
 import java.util.concurrent.Callable
-import java.util.{Locale, Optional, UUID}
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
@@ -103,7 +101,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
   }
 
-  implicit val playerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
+  implicit val allPlayerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
     override def name: String = "player"
 
     override def parse(
@@ -139,7 +137,14 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     }
   }
 
-  implicit val onlyOnePlayer: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
+  implicit val playerParam: Parameter[Player] = new ProxyParameter[Player, OnlyOne[Player]] {
+    override def param: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Player)] = param.parse(source, extra, xs).map(t => t._1 -> t._2.value)
+  }
 
   implicit def entityParam[A <: Entity](implicit typeable: Typeable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
     override def name: String = "entity"
@@ -175,7 +180,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         extra: Unit,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], User)] = {
-      onlyOnePlayer.parse(source, extra, xs).map(t => t._1 -> t._2.value).left.flatMap { e1 =>
+      playerParam.parse(source, extra, xs).left.flatMap { e1 =>
         val users = userStorage.getAll.asScala
           .collect {
             case profile if profile.getName.isPresent =>
@@ -290,32 +295,6 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       ScammanderHelper.suggestions(xs, Sponge.getPluginManager.getPlugins.asScala.map(_.getId))
   }
 
-  implicit val urlParam: Parameter[URL] = new Parameter[URL] {
-    override def name: String = "url"
-
-    override def parse(source: CommandSource, extra: Unit, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], URL)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        Try(new URL(arg))
-          .flatMap { url =>
-            Try {
-              url.toURI
-              xs.tail -> url
-            }
-          }
-          .toEither
-          .left
-          .map(e => CommandSyntaxError(e.getMessage, pos))
-      } else Left(ScammanderHelper.notEnoughArgs)
-    }
-
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
-  }
-
   implicit val ipParam: Parameter[InetAddress] = new Parameter[InetAddress] {
     override def name: String = "ip"
 
@@ -330,8 +309,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
           xs.tail -> InetAddress.getByName(arg)
         }.toEither.left.flatMap {
           case _: UnknownHostException =>
-            onlyOnePlayer.parse(source, extra, xs).map {
-              case (ys, OnlyOne(player)) =>
+            playerParam.parse(source, extra, xs).map {
+              case (ys, player) =>
                 ys -> player.getConnection.getAddress.getAddress
             }
           case e => Left(CommandUsageError(e.getMessage, pos))
@@ -346,9 +325,6 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         xs: List[RawCmdArg]
     ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
   }
-
-  implicit val bigDecimalParam: Parameter[BigDecimal] = primitivePar("bigDecimal", BigDecimal.apply)
-  implicit val bigIntParam:     Parameter[BigInt]     = primitivePar("bigInt", BigInt.apply)
 
   implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
     override def name: String = "dataContainer"
@@ -368,79 +344,6 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
             CommandSyntaxError(e.getMessage, xs.lastOption.map(_.start).getOrElse(-1))
           }
       }
-    }
-
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
-  }
-
-  implicit val uuidParam: Parameter[UUID] = primitivePar("uuid", UUID.fromString)
-
-  implicit val dateTimeParam: Parameter[LocalDateTime] = new Parameter[LocalDateTime] {
-    override def name: String = "dataTime"
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], LocalDateTime)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        Try(LocalDateTime.parse(arg))
-          .recoverWith {
-            case _: DateTimeParseException =>
-              Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg)))
-          }
-          .recoverWith {
-            case _: DateTimeParseException => Try(LocalDateTime.of(LocalDate.parse(arg), LocalTime.MIDNIGHT))
-          }
-          .toEither
-          .left
-          .map { _ =>
-            CommandSyntaxError("Invalid date-time!", pos)
-          }
-          .map(xs.tail -> _)
-      } else Left(ScammanderHelper.notEnoughArgs)
-    }
-
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = {
-      val date = LocalDateTime.now.withNano(0).toString
-      val arg  = xs.headOption.map(_.content).getOrElse("")
-
-      xs.tail -> (if (date.startsWith(arg)) Seq(date) else Nil)
-    }
-  }
-
-  implicit val durationParam: Parameter[Duration] = new Parameter[Duration] {
-    override def name: String = "duration"
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], Duration)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        val s                      = arg.toUpperCase(Locale.ROOT)
-
-        val usedS = if (!s.contains("T")) {
-          val s1 = if (s.contains("D")) {
-            if (s.contains("H") || s.contains("M") || s.contains("S")) s.replace("D", "DT")
-            else if (s.startsWith("P")) "PT" + s.substring(1)
-            else "T" + s
-          } else s
-          if (!s1.startsWith("P")) "P" + s1 else s1
-        } else s
-
-        Try(Duration.parse(usedS)).toEither.left
-          .map(e => CommandSyntaxError(e.getMessage, pos))
-          .map(xs.tail -> _)
-      } else Left(ScammanderHelper.notEnoughArgs)
     }
 
     override def suggestions(
@@ -523,28 +426,6 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
     override def usage(source: CommandSource): String =
       targeter.getTarget(source, -1).map(_ => s"[$name]").getOrElse(super.usage(source))
-  }
-
-  sealed trait Now
-  type OrNow[Base] = Base Or Now
-  implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
-    override def name: String = dateTimeParam.name
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], LocalDateTime Or Now)] = {
-      val (ys, res) = dateTimeParam.parse(source, extra, xs).getOrElse((xs, LocalDateTime.now))
-      Right((ys, Or(res)))
-    }
-
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = dateTimeParam.suggestions(source, extra, xs)
-
-    override def usage(source: CommandSource): String = s"[$name]"
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {

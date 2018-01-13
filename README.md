@@ -65,7 +65,7 @@ Scammander is still heavily a work in progress project. As such there are many t
 - [ ] Child commands
 - [ ] Flags
 - [ ] Better error messages for non-Sponge
-- [ ] A way to handle X or else source
+- [x] A way to handle X or else source
 - [ ] Even less boilerplate
 - [ ] More stuff I can't remember now
 

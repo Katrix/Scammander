@@ -70,7 +70,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player => Right(player)
     case _              => Left(CommandUsageError("This command can only be used by players", -1))
-  }(identity)
+  }
 
   case class BukkitCommandWrapper[Sender, Param](command: Command[Sender, Param]) extends TabExecutor {
 
@@ -112,18 +112,11 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         alias: String,
         args: Array[String]
     ): util.List[String] = {
-      command.userValidator
-        .validate(sender)
-        .map(
-          source =>
-            command.suggestions(
-              source,
-              BukkitExtra(bukkitCommand, alias),
-              ScammanderHelper.stringToRawArgs(args.mkString(" "))
-          )
-        )
-        .getOrElse(Nil)
-        .asJava
+      command.suggestions(
+        sender,
+        BukkitExtra(bukkitCommand, alias),
+        ScammanderHelper.stringToRawArgs(args.mkString(" "))
+      ).asJava
     }
 
     def register(plugin: JavaPlugin, name: String): Unit = {

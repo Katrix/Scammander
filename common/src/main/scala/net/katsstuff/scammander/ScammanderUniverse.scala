@@ -20,13 +20,18 @@
  */
 package net.katsstuff.scammander
 
+import java.net.URL
+import java.time.format.DateTimeParseException
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
+import java.util.{Locale, UUID}
+
 import scala.annotation.tailrec
 import scala.util.Try
 
 import net.katsstuff.scammander
 import net.katsstuff.scammander.misc.{MkHListWitness, RawCmdArg}
-import shapeless.labelled.FieldType
 import shapeless._
+import shapeless.labelled.FieldType
 
 trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     extends NormalParametersInstances[RootSender, RunExtra, TabExtra]
@@ -291,6 +296,25 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       override def usage(source: RootSender): String =
         validator.validate(source).map(_ => s"[$name]").getOrElse(super.usage(source))
     }
+
+  sealed trait Now
+  type OrNow[Base] = Base Or Now
+  implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
+    override def name: String = dateTimeParam.name
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], LocalDateTime Or Now)] = {
+      val (ys, res) = dateTimeParam.parse(source, extra, xs).getOrElse((xs, LocalDateTime.now))
+      Right((ys, Or(res)))
+    }
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      dateTimeParam.suggestions(source, extra, xs)
+
+    override def usage(source: RootSender): String = s"[$name]"
+  }
 }
 
 trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
@@ -342,6 +366,106 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
   implicit val doubleParam: Parameter[Double]  = primitivePar("double", _.toDouble)
   implicit val boolPar:     Parameter[Boolean] = primitivePar("boolean", _.toBoolean)
   implicit val strPar:      Parameter[String]  = primitivePar("string", identity)
+
+  implicit val urlParam: Parameter[URL] = new Parameter[URL] {
+    override def name: String = "url"
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], URL)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        Try(new URL(arg))
+          .flatMap { url =>
+            Try {
+              url.toURI
+              xs.tail -> url
+            }
+          }
+          .toEither
+          .left
+          .map(e => CommandSyntaxError(e.getMessage, pos))
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (xs.tail, Nil)
+  }
+
+  implicit val bigDecimalParam: Parameter[BigDecimal] = primitivePar("bigDecimal", BigDecimal.apply)
+  implicit val bigIntParam:     Parameter[BigInt]     = primitivePar("bigInt", BigInt.apply)
+
+  implicit val uuidParam: Parameter[UUID] = primitivePar("uuid", UUID.fromString)
+
+  implicit val dateTimeParam: Parameter[LocalDateTime] = new Parameter[LocalDateTime] {
+    override def name: String = "dataTime"
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], LocalDateTime)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        Try(LocalDateTime.parse(arg))
+          .recoverWith {
+            case _: DateTimeParseException =>
+              Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg)))
+          }
+          .recoverWith {
+            case _: DateTimeParseException => Try(LocalDateTime.of(LocalDate.parse(arg), LocalTime.MIDNIGHT))
+          }
+          .toEither
+          .left
+          .map { _ =>
+            CommandSyntaxError("Invalid date-time!", pos)
+          }
+          .map(xs.tail -> _)
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: RootSender,
+        extra: TabExtra,
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = {
+      val date = LocalDateTime.now.withNano(0).toString
+      val arg  = xs.headOption.map(_.content).getOrElse("")
+
+      xs.tail -> (if (date.startsWith(arg)) Seq(date) else Nil)
+    }
+  }
+
+  implicit val durationParam: Parameter[Duration] = new Parameter[Duration] {
+    override def name: String = "duration"
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Duration)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        val s                      = arg.toUpperCase(Locale.ROOT)
+
+        val usedS = if (!s.contains("T")) {
+          val s1 = if (s.contains("D")) {
+            if (s.contains("H") || s.contains("M") || s.contains("S")) s.replace("D", "DT")
+            else if (s.startsWith("P")) "PT" + s.substring(1)
+            else "T" + s
+          } else s
+          if (!s1.startsWith("P")) "P" + s1 else s1
+        } else s
+
+        Try(Duration.parse(usedS)).toEither.left
+          .map(e => CommandSyntaxError(e.getMessage, pos))
+          .map(xs.tail -> _)
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (xs.tail, Nil)
+  }
 }
 
 trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
