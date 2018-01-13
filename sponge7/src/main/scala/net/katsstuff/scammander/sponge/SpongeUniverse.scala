@@ -362,16 +362,15 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         ScammanderHelper.suggestions(xs, Sponge.getRegistry.getAllOf(clazz).asScala.map(_.getId))
     }
 
-  //TODO: Many
-  implicit val pluginParam: Parameter[PluginContainer] = new Parameter[PluginContainer] {
+  implicit val pluginParam: Parameter[Set[PluginContainer]] = new Parameter[Set[PluginContainer]] {
     override def name: String = "plguin"
 
     override def parse(
         source: CommandSource,
         extra: Unit,
         xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], PluginContainer)] =
-      ScammanderHelper.parse(
+    ): CommandStep[(List[RawCmdArg], Set[PluginContainer])] =
+      ScammanderHelper.parseMany(
         name,
         xs,
         Sponge.getPluginManager.getPlugins.asScala.map(obj => obj.getId.toLowerCase(Locale.ROOT) -> obj).toMap
