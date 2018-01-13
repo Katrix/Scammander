@@ -35,17 +35,12 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   trait UserValidator[A] {
 
     def validate(sender: RootSender): CommandStep[A]
-
-    def toSender(a: A): RootSender
   }
   object UserValidator {
-    def mkTransformer[A](validator: RootSender => CommandStep[A])(back: A => RootSender): UserValidator[A] =
-      new UserValidator[A] {
-        override def validate(sender: RootSender): CommandStep[A] = validator(sender)
-        override def toSender(a: A):               RootSender     = back(a)
-      }
+    def mkValidator[A](validator: RootSender => CommandStep[A]): UserValidator[A] =
+      (sender: RootSender) => validator(sender)
 
-    implicit val rootValidator: UserValidator[RootSender] = mkTransformer(Right.apply)(identity)
+    implicit val rootValidator: UserValidator[RootSender] = mkValidator(Right.apply)
   }
 
   //Results and steps
@@ -78,8 +73,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
     def run(source: Sender, extra: RunExtra, arg: Param): CommandResult
 
-    def suggestions(source: Sender, extra: TabExtra, strArgs: List[RawCmdArg]): Seq[String] =
-      par.suggestions(userValidator.toSender(source), extra, strArgs)._2
+    def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): Seq[String] =
+      par.suggestions(source, extra, strArgs)._2
 
     def usage(source: RootSender): String = par.usage(source)
   }
@@ -292,6 +287,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
         res.map(t => t._1 -> Or(t._2))
       }
+
+      override def usage(source: RootSender): String =
+        validator.validate(source).map(_ => s"[$name]").getOrElse(super.usage(source))
     }
 }
 
@@ -336,14 +334,14 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, possibleSuggestions())
     }
 
-  implicit val bytePar:   Parameter[Byte]    = primitivePar("byte", _.toByte)
-  implicit val shortPar:  Parameter[Short]   = primitivePar("short", _.toShort)
-  implicit val intPar:    Parameter[Int]     = primitivePar("int", _.toInt)
-  implicit val longPar:   Parameter[Long]    = primitivePar("long", _.toLong)
-  implicit val floatPar:  Parameter[Float]   = primitivePar("float", _.toFloat)
-  implicit val doublePar: Parameter[Double]  = primitivePar("double", _.toDouble)
-  implicit val boolPar:   Parameter[Boolean] = primitivePar("boolean", _.toBoolean)
-  implicit val strPar:    Parameter[String]  = primitivePar("string", identity)
+  implicit val bytePar:     Parameter[Byte]    = primitivePar("byte", _.toByte)
+  implicit val shortPar:    Parameter[Short]   = primitivePar("short", _.toShort)
+  implicit val intPar:      Parameter[Int]     = primitivePar("int", _.toInt)
+  implicit val longPar:     Parameter[Long]    = primitivePar("long", _.toLong)
+  implicit val floatPar:    Parameter[Float]   = primitivePar("float", _.toFloat)
+  implicit val doubleParam: Parameter[Double]  = primitivePar("double", _.toDouble)
+  implicit val boolPar:     Parameter[Boolean] = primitivePar("boolean", _.toBoolean)
+  implicit val strPar:      Parameter[String]  = primitivePar("string", identity)
 }
 
 trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]

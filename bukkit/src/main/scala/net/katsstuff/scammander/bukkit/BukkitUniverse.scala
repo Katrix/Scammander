@@ -67,7 +67,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
     def register(plugin: JavaPlugin, name: String): Unit = toBukkit.register(plugin, name)
   }
 
-  implicit val playerSender: UserValidator[Player] = UserValidator.mkTransformer {
+  implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player => Right(player)
     case _              => Left(CommandUsageError("This command can only be used by players", -1))
   }(identity)

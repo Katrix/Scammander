@@ -20,31 +20,38 @@
  */
 package net.katsstuff.scammander.sponge
 
-import java.net.{InetAddress, URL}
-import java.time.{Duration, LocalDateTime}
+import java.io.{BufferedReader, StringReader}
+import java.net.{InetAddress, URL, UnknownHostException}
+import java.time.format.DateTimeParseException
+import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util
-import java.util.{Optional, UUID}
+import java.util.concurrent.Callable
+import java.util.{Locale, Optional, UUID}
 
 import scala.collection.JavaConverters._
+import scala.reflect.ClassTag
+import scala.util.Try
 
-import org.spongepowered.api.{CatalogType, Sponge}
-import org.spongepowered.api.command.args.{ArgumentParseException, GenericArguments}
-import org.spongepowered.api.command.source.ProxySource
-import org.spongepowered.api.command._
-import org.spongepowered.api.command.{CommandResult => SpongeCommandResult}
+import org.spongepowered.api.command.args.ArgumentParseException
+import org.spongepowered.api.command.source.{ProxySource, RemoteSource}
+import org.spongepowered.api.command.{CommandResult => SpongeCommandResult, _}
 import org.spongepowered.api.data.DataContainer
+import org.spongepowered.api.data.persistence.DataTranslators
 import org.spongepowered.api.entity.Entity
 import org.spongepowered.api.entity.living.player.{Player, User}
 import org.spongepowered.api.plugin.PluginContainer
+import org.spongepowered.api.service.user.UserStorageService
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.text.selector.Selector
 import org.spongepowered.api.util.blockray.{BlockRay, BlockRayHit}
-import org.spongepowered.api.world.{Location, World}
+import org.spongepowered.api.world.{Locatable, Location, World}
+import org.spongepowered.api.{CatalogType, Sponge}
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
 import net.katsstuff.scammander.misc.RawCmdArg
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
+import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless._
 
 trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
@@ -54,8 +61,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   //Helpers used when registering command
 
   object Alias {
-    def apply(single: String):                     Seq[String] = Seq(single)
-    def multiple(first: String, aliases: String*): Seq[String] = first +: aliases
+    def apply(first: String, aliases: String*): Seq[String] = first +: aliases
   }
 
   object Permission {
@@ -161,22 +167,290 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, Selector.complete(xs.head.content).asScala)
   }
 
-  implicit val userParam:                        Parameter[User]            = ???
-  implicit val worldParam:                       Parameter[World]           = ???
-  implicit val vector3dParam:                    Parameter[Vector3d]        = ???
-  implicit val locationParam:                    Parameter[Location[World]] = ???
-  implicit def catalogedParam[A <: CatalogType]: Parameter[A]               = ???
-  implicit val pluginParam:                      Parameter[PluginContainer] = ???
-  implicit val urlParam:                         Parameter[URL]             = ???
-  implicit val ipParam:                          Parameter[InetAddress]     = ???
-  implicit val bigDecimalParam:                  Parameter[BigDecimal]      = ???
-  implicit val bigIntParam:                      Parameter[BigInt]          = ???
-  implicit val dataContainerParam:               Parameter[DataContainer]   = ???
-  implicit val uuidParam:                        Parameter[UUID]            = ???
-  implicit val dateTimeParam:                    Parameter[LocalDateTime]   = ??? //OrNow
-  implicit val durationParam:                    Parameter[Duration]        = ??? //OrNow
+  implicit val userParam: Parameter[User] = new Parameter[User] {
+    private val userStorage = Sponge.getServiceManager.provideUnchecked(classOf[UserStorageService])
+    override def name: String = "user"
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], User)] = {
+      onlyOnePlayer.parse(source, extra, xs).map(t => t._1 -> t._2.value).left.flatMap { e1 =>
+        val users = userStorage.getAll.asScala
+          .collect {
+            case profile if profile.getName.isPresent =>
+              val name = profile.getName.get()
+              name -> name
+          }
+          .toMap
+          .filterKeys(userStorage.get(_).isPresent) //filter and map here are lazy, so we only do as many lookups as needed
+          .mapValues(userStorage.get(_).get())
+        ScammanderHelper.parse(name, xs, users).left.map { e2 =>
+          e1.merge(e2)
+        }
+      }
+    }
 
-  //TODO: orSource, orTarget, text
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) =
+      ScammanderHelper.suggestions(xs, userStorage.getAll.asScala.collect {
+        case profile if profile.getName.isPresent => profile.getName.get()
+      })
+  }
+
+  implicit val worldParam: Parameter[World] = ???
+
+  implicit val vector3dParam: Parameter[Vector3d] = new Parameter[Vector3d] {
+    override def name: String = "vector3"
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Vector3d)] = {
+      val relative = source match {
+        case locatable: Locatable => Some(locatable.getLocation)
+        case _                    => None
+      }
+
+      for {
+        tx <- parseRelativeDouble(source, xs, relative.map(_.getX))
+        ty <- parseRelativeDouble(source, tx._1, relative.map(_.getY))
+        tz <- parseRelativeDouble(source, ty._1, relative.map(_.getZ))
+      } yield tz._1 -> Vector3d.from(tx._2, ty._2, tz._2)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = (xs.drop(3), Nil)
+
+    private def parseRelativeDouble(
+        source: CommandSource,
+        xs: List[RawCmdArg],
+        relativeToOpt: Option[Double]
+    ): CommandStep[(List[RawCmdArg], Double)] = {
+      val RawCmdArg(start, end, arg) = xs.head
+
+      if (arg.startsWith("~")) {
+        relativeToOpt
+          .toRight(CommandUsageError("Relative position specified but source does not have a position", start))
+          .flatMap { relativeTo =>
+            val newArg = arg.substring(1)
+            if (newArg.isEmpty) Right(xs.tail -> relativeTo)
+            else {
+              doubleParam.parse(source, (), RawCmdArg(start, end, newArg) :: xs.tail).map {
+                case (ys, res) =>
+                  ys -> (res + relativeTo)
+              }
+            }
+          }
+      } else {
+        doubleParam.parse(source, (), xs)
+      }
+    }
+  }
+  implicit val locationParam: Parameter[Location[World]] = ???
+
+  implicit def catalogedParam[A <: CatalogType](implicit classTag: ClassTag[A], typeable: Typeable[A]): Parameter[A] =
+    new Parameter[A] {
+      private val clazz = classTag.runtimeClass.asInstanceOf[Class[A]]
+
+      override def name: String = typeable.describe
+
+      override def parse(source: CommandSource, extra: Unit, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
+        ScammanderHelper.parse(name, xs, Sponge.getRegistry.getAllOf(clazz).asScala.map(obj => obj.getId -> obj).toMap)
+
+      override def suggestions(
+          source: CommandSource,
+          extra: Location[World],
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) =
+        ScammanderHelper.suggestions(xs, Sponge.getRegistry.getAllOf(clazz).asScala.map(_.getId))
+    }
+
+  implicit val pluginParam: Parameter[PluginContainer] = new Parameter[PluginContainer] {
+    override def name: String = "plguin"
+
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], PluginContainer)] =
+      ScammanderHelper.parse(name, xs, Sponge.getPluginManager.getPlugins.asScala.map(obj => obj.getId -> obj).toMap)
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) =
+      ScammanderHelper.suggestions(xs, Sponge.getPluginManager.getPlugins.asScala.map(_.getId))
+  }
+
+  implicit val urlParam: Parameter[URL] = new Parameter[URL] {
+    override def name: String = "url"
+
+    override def parse(source: CommandSource, extra: Unit, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], URL)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        Try(new URL(arg))
+          .flatMap { url =>
+            Try {
+              url.toURI
+              xs.tail -> url
+            }
+          }
+          .toEither
+          .left
+          .map(e => CommandSyntaxError(e.getMessage, pos))
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+  }
+
+  implicit val ipParam: Parameter[InetAddress] = new Parameter[InetAddress] {
+    override def name: String = "ip"
+
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], InetAddress)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        Try {
+          xs.tail -> InetAddress.getByName(arg)
+        }.toEither.left.flatMap {
+          case _: UnknownHostException =>
+            onlyOnePlayer.parse(source, extra, xs).map {
+              case (ys, OnlyOne(player)) =>
+                ys -> player.getConnection.getAddress.getAddress
+            }
+          case e => Left(CommandUsageError(e.getMessage, pos))
+        }
+
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+  }
+
+  implicit val bigDecimalParam: Parameter[BigDecimal] = primitivePar("bigDecimal", BigDecimal.apply)
+  implicit val bigIntParam:     Parameter[BigInt]     = primitivePar("bigInt", BigInt.apply)
+
+  implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
+    override def name: String = "dataContainer"
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], DataContainer)] = {
+      remainingAsStringParam.parse(source, extra, xs).flatMap {
+        case (ys, RemainingAsString(str)) =>
+          val reader: Callable[BufferedReader] = () => new BufferedReader(new StringReader(str))
+          val loader = HoconConfigurationLoader.builder.setSource(reader).build
+
+          Try {
+            ys -> DataTranslators.CONFIGURATION_NODE.translate(loader.load())
+          }.toEither.left.map { e =>
+            CommandSyntaxError(e.getMessage, xs.lastOption.map(_.start).getOrElse(-1))
+          }
+      }
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+  }
+
+  implicit val uuidParam: Parameter[UUID] = primitivePar("uuid", UUID.fromString)
+
+  implicit val dateTimeParam: Parameter[LocalDateTime] = new Parameter[LocalDateTime] {
+    override def name: String = "dataTime"
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], LocalDateTime)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        Try(LocalDateTime.parse(arg))
+          .recoverWith {
+            case _: DateTimeParseException =>
+              Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg)))
+          }
+          .recoverWith {
+            case _: DateTimeParseException => Try(LocalDateTime.of(LocalDate.parse(arg), LocalTime.MIDNIGHT))
+          }
+          .toEither
+          .left
+          .map { _ =>
+            CommandSyntaxError("Invalid date-time!", pos)
+          }
+          .map(xs.tail -> _)
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = {
+      val date = LocalDateTime.now.withNano(0).toString
+      val arg  = xs.headOption.map(_.content).getOrElse("")
+
+      xs.tail -> (if (date.startsWith(arg)) Seq(date) else Nil)
+    }
+  }
+
+  implicit val durationParam: Parameter[Duration] = new Parameter[Duration] {
+    override def name: String = "duration"
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Duration)] = {
+      if (xs.nonEmpty) {
+        val RawCmdArg(pos, _, arg) = xs.head
+        val s                      = arg.toUpperCase(Locale.ROOT)
+
+        val usedS = if (!s.contains("T")) {
+          val s1 = if (s.contains("D")) {
+            if (s.contains("H") || s.contains("M") || s.contains("S")) s.replace("D", "DT")
+            else if (s.startsWith("P")) "PT" + s.substring(1)
+            else "T" + s
+          } else s
+          if (!s1.startsWith("P")) "P" + s1 else s1
+        } else s
+
+        Try(Duration.parse(usedS)).toEither.left
+          .map(e => CommandSyntaxError(e.getMessage, pos))
+          .map(xs.tail -> _)
+      } else Left(ScammanderHelper.notEnoughArgs)
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+  }
+
+  //TODO: text
 
   trait Targeter[A] {
     def getTarget(source: CommandSource, pos: Int): CommandStep[A]
@@ -246,6 +520,31 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
       ret.map(t => t._1 -> Or(t._2))
     }
+
+    override def usage(source: CommandSource): String =
+      targeter.getTarget(source, -1).map(_ => s"[$name]").getOrElse(super.usage(source))
+  }
+
+  sealed trait Now
+  type OrNow[Base] = Base Or Now
+  implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
+    override def name: String = dateTimeParam.name
+    override def parse(
+        source: CommandSource,
+        extra: Unit,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], LocalDateTime Or Now)] = {
+      val (ys, res) = dateTimeParam.parse(source, extra, xs).getOrElse((xs, LocalDateTime.now))
+      Right((ys, Or(res)))
+    }
+
+    override def suggestions(
+        source: CommandSource,
+        extra: Location[World],
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = dateTimeParam.suggestions(source, extra, xs)
+
+    override def usage(source: CommandSource): String = s"[$name]"
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
@@ -261,23 +560,41 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       toSponge(CommandInfo(permission, help, shortDescription)).register(plugin, aliases)
   }
 
-  implicit val playerSender: UserValidator[Player] = UserValidator.mkTransformer {
+  implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player     => Right(player)
     case proxy: ProxySource => playerSender.validate(proxy.getOriginalSource)
     case _                  => Left(CommandUsageError("This command can only be used by players", -1))
-  }(identity)
+  }
+
+  implicit val userSender: UserValidator[User] = UserValidator.mkValidator {
+    case user: User         => Right(user)
+    case proxy: ProxySource => userSender.validate(proxy.getOriginalSource)
+    case _                  => Left(CommandUsageError("This command can only be used by users", -1))
+  }
 
   implicit def entitySender[A <: Entity: Typeable]: UserValidator[A] = {
     val EntityCase = TypeCase[A]
 
-    UserValidator.mkTransformer {
+    UserValidator.mkValidator {
       case EntityCase(entity) => Right(entity)
       case proxy: ProxySource => entitySender.validate(proxy.getOriginalSource)
       case _                  => Left(CommandUsageError("This command can only be used by players", -1))
-    } {
-      case source: CommandSource => source
-      case _                     => throw new IllegalStateException("Tried to convert non sender to sender using UserValidator")
     }
+  }
+
+  implicit val locationSender: UserValidator[Location[World]] = UserValidator.mkValidator {
+    case locatable: Locatable => Right(locatable.getLocation)
+    case proxy: ProxySource   => locationSender.validate(proxy.getOriginalSource)
+    case _                    => Left(CommandUsageError("This command can only be used by things which have a location", -1))
+  }
+
+  implicit val vector3dSender: UserValidator[Vector3d] =
+    UserValidator.mkValidator(locationSender.validate(_).map(_.getPosition))
+
+  implicit val ipSender: UserValidator[InetAddress] = UserValidator.mkValidator {
+    case remote: RemoteSource => Right(remote.getConnection.getAddress.getAddress)
+    case proxy: ProxySource   => ipSender.validate(proxy.getOriginalSource)
+    case _                    => Left(CommandUsageError("This command can only be used by things which have an IP", -1))
   }
 
   case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
@@ -312,11 +629,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         arguments: String,
         targetPosition: Location[World]
     ): util.List[String] =
-      command.userValidator
-        .validate(source)
-        .map(source => command.suggestions(source, targetPosition, ScammanderHelper.stringToRawArgs(arguments)))
-        .getOrElse(Nil)
-        .asJava
+      command.suggestions(source, targetPosition, ScammanderHelper.stringToRawArgs(arguments)).asJava
 
     override def testPermission(source: CommandSource): Boolean = info.permission.forall(source.hasPermission)
 

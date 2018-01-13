@@ -63,6 +63,7 @@ Scammander is still heavily a work in progress project. As such there are many t
 - [ ] Bukkit implementation with internal/NMS
 - [ ] Forge implementation
 - [ ] Child commands
+- [ ] Flags
 - [ ] Better error messages for non-Sponge
 - [ ] A way to handle X or else source
 - [ ] Even less boilerplate
