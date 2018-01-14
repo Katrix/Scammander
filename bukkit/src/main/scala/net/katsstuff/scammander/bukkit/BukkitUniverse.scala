@@ -229,7 +229,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
       val res = for {
         sender <- command.userValidator.validate(source)
-        param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgs(args.mkString(" ")))
+        param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
       } yield command.run(sender, extra, param._2)
 
       res.merge match {
@@ -258,7 +258,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         args: Array[String]
     ): util.List[String] =
       command
-        .suggestions(sender, BukkitExtra(bukkitCommand, alias), ScammanderHelper.stringToRawArgs(args.mkString(" ")))
+        .suggestions(sender, BukkitExtra(bukkitCommand, alias), ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
         .asJava
 
     def register(plugin: JavaPlugin, name: String): Unit = {

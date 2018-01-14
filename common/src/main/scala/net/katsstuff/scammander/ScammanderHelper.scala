@@ -27,12 +27,25 @@ import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 
 object ScammanderHelper {
 
-  private val spaceRegex = """\S+""".r //TODO: Support quoted arguments
+  private val spaceRegex  = """\S+""".r
+  //https://stackoverflow.com/questions/249791/regex-for-quoted-string-with-escaping-quotes
+  private val quotedRegex = """(?:"((?:[^"\\]|\\.)+)")|((?:\S)+)""".r
 
   val notEnoughArgs = CommandSyntaxError("Not enough arguments", -1)
 
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
+
+  def stringToRawArgsQuoted(argumments: String): List[RawCmdArg] = {
+    quotedRegex
+      .findAllMatchIn(argumments)
+      .map { m =>
+        val quoted = m.group(1) != null
+        val group  = if (quoted) 1 else 2
+        RawCmdArg(m.start(group), m.end(group), m.group(group))
+      }
+      .toList
+  }
 
   def suggestions(xs: List[RawCmdArg], choices: => Iterable[String]): (List[RawCmdArg], Seq[String]) = {
     val head = xs.head

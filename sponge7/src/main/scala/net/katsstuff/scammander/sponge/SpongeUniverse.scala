@@ -518,7 +518,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     override def process(source: CommandSource, arguments: String): SpongeCommandResult = {
       val res = for {
         sender <- command.userValidator.validate(source)
-        param  <- command.par.parse(source, (), ScammanderHelper.stringToRawArgs(arguments))
+        param  <- command.par.parse(source, (), ScammanderHelper.stringToRawArgsQuoted(arguments))
       } yield command.run(sender, (), param._2)
 
       res.merge match {
@@ -544,7 +544,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         arguments: String,
         targetPosition: Location[World]
     ): util.List[String] =
-      command.suggestions(source, targetPosition, ScammanderHelper.stringToRawArgs(arguments)).asJava
+      command.suggestions(source, targetPosition, ScammanderHelper.stringToRawArgsQuoted(arguments)).asJava
 
     override def testPermission(source: CommandSource): Boolean = info.permission.forall(source.hasPermission)
 

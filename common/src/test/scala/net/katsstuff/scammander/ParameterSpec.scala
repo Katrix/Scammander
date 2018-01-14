@@ -9,7 +9,7 @@ import shapeless._
 
 class ParameterSpec extends FunSuite with Matchers with ScammanderUniverse[Unit, Unit, Unit] {
 
-  def mkArgs(arguments: String): List[RawCmdArg] = ScammanderHelper.stringToRawArgs(arguments)
+  def mkArgs(arguments: String): List[RawCmdArg] = ScammanderHelper.stringToRawArgsQuoted(arguments)
 
   def parse[A](arguments: String)(implicit param: Parameter[A]): Option[A] =
     param.parse((), (), mkArgs(arguments)).map(_._2).toOption
