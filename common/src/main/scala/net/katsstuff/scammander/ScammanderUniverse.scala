@@ -278,6 +278,100 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       }
     }
   }
+
+  case class ValueFlag[Name <: String, A](value: Option[A])
+  implicit def valueFlagParameter[Name <: String, A](
+      implicit witness: Witness.Aux[Name],
+      flagParam: Parameter[A]
+  ): Parameter[ValueFlag[Name, A]] =
+    new Parameter[ValueFlag[Name, A]] {
+      private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
+      override def name: String = s"$flagName ${flagParam.name}"
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], ValueFlag[Name, A])] = {
+        def inner(ys: List[RawCmdArg], acc: List[RawCmdArg]): CommandStep[(List[RawCmdArg], ValueFlag[Name, A])] = {
+          if (ys.nonEmpty) {
+            val h = ys.head
+            if (h.content == flagName) {
+              flagParam.parse(source, extra, ys.tail).map(t => (acc ::: t._1, ValueFlag(Some(t._2))))
+            } else inner(ys.tail, h :: acc)
+          } else Right((acc, ValueFlag(None)))
+        }
+
+        inner(xs, Nil)
+      }
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) =
+        if (xs.lengthCompare(2) == 0) {
+          flagParam.suggestions(source, extra, xs.drop(1))
+        } else (xs.drop(2), Nil)
+    }
+
+  case class BooleanFlag[Name <: String](present: Boolean)
+  implicit def booleanFlagParameter[Name <: String](implicit witness: Witness.Aux[Name]): Parameter[BooleanFlag[Name]] =
+    new Parameter[BooleanFlag[Name]] {
+      private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
+      override def name: String = flagName
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], BooleanFlag[Name])] = {
+        def inner(ys: List[RawCmdArg], acc: List[RawCmdArg]): CommandStep[(List[RawCmdArg], BooleanFlag[Name])] = {
+          if (ys.nonEmpty) {
+            val h = ys.head
+            if (h.content == flagName) {
+              Right((ys.tail ::: acc, BooleanFlag(true)))
+            } else inner(ys.tail, h :: acc)
+          } else Right((acc, BooleanFlag(false)))
+        }
+
+        inner(xs, Nil)
+      }
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
+    }
+
+  case class Flags[A, B](flags: A, parameters: B)
+  implicit def flagsParameter[A, B](
+      implicit flagsParam: Parameter[A],
+      paramParam: Parameter[B]
+  ): Parameter[Flags[A, B]] = new Parameter[Flags[A, B]] {
+    override def name: String = s"${paramParam.name} ${flagsParam.name}"
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Flags[A, B])] =
+      for {
+        t1 <- flagsParam.parse(source, extra, xs)
+        t2 <- paramParam.parse(source, extra, t1._1)
+      } yield t2._1 -> Flags(t1._2, t2._2)
+
+    override def suggestions(
+        source: RootSender,
+        extra: TabExtra,
+        xs: List[RawCmdArg]
+    ): (List[RawCmdArg], Seq[String]) = {
+      val (ys, flagSuggestions) = flagsParam.suggestions(source, extra, xs)
+      if (flagSuggestions.isEmpty) paramParam.suggestions(source, extra, ys) else ys -> flagSuggestions
+    }
+  }
+
   /*TODO: Find way to use Option class instead
     class Optional[A]
     class OptionalWeak[A]
@@ -333,7 +427,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
 trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
   self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
-  def primitivePar[A](parName: String, s: String => A): Parameter[A] =
+  def primitiveParam[A](parName: String, s: String => A): Parameter[A] =
     new Parameter[A] {
       override def name: String = parName
 
@@ -372,14 +466,15 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, possibleSuggestions())
     }
 
-  implicit val bytePar:     Parameter[Byte]    = primitivePar("byte", _.toByte)
-  implicit val shortPar:    Parameter[Short]   = primitivePar("short", _.toShort)
-  implicit val intPar:      Parameter[Int]     = primitivePar("int", _.toInt)
-  implicit val longPar:     Parameter[Long]    = primitivePar("long", _.toLong)
-  implicit val floatPar:    Parameter[Float]   = primitivePar("float", _.toFloat)
-  implicit val doubleParam: Parameter[Double]  = primitivePar("double", _.toDouble)
-  implicit val boolPar:     Parameter[Boolean] = primitivePar("boolean", _.toBoolean)
-  implicit val strPar:      Parameter[String]  = primitivePar("string", identity)
+  implicit val byteParam:   Parameter[Byte]    = primitiveParam("byte", _.toByte)
+  implicit val shortParam:  Parameter[Short]   = primitiveParam("short", _.toShort)
+  implicit val intParam:    Parameter[Int]     = primitiveParam("int", _.toInt)
+  implicit val longParam:   Parameter[Long]    = primitiveParam("long", _.toLong)
+  implicit val floatParam:  Parameter[Float]   = primitiveParam("float", _.toFloat)
+  implicit val doubleParam: Parameter[Double]  = primitiveParam("double", _.toDouble)
+  implicit val boolParam:   Parameter[Boolean] = primitiveParam("boolean", _.toBoolean)
+  implicit val strParam:    Parameter[String]  = primitiveParam("string", identity)
+  implicit val unitParam:   Parameter[Unit]    = primitiveParam("", _ => ())
 
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
     override def name: String = "url"
@@ -408,10 +503,10 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       (xs.tail, Nil)
   }
 
-  implicit val bigDecimalParam: Parameter[BigDecimal] = primitivePar("bigDecimal", BigDecimal.apply)
-  implicit val bigIntParam:     Parameter[BigInt]     = primitivePar("bigInt", BigInt.apply)
+  implicit val bigDecimalParam: Parameter[BigDecimal] = primitiveParam("bigDecimal", BigDecimal.apply)
+  implicit val bigIntParam:     Parameter[BigInt]     = primitiveParam("bigInt", BigInt.apply)
 
-  implicit val uuidParam: Parameter[UUID] = primitivePar("uuid", UUID.fromString)
+  implicit val uuidParam: Parameter[UUID] = primitiveParam("uuid", UUID.fromString)
 
   implicit val dateTimeParam: Parameter[LocalDateTime] = new Parameter[LocalDateTime] {
     override def name: String = "dataTime"
