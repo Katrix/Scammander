@@ -29,7 +29,7 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 import net.katsstuff.scammander
-import net.katsstuff.scammander.misc.{MkHListWitness, RawCmdArg}
+import net.katsstuff.scammander.misc.{HasName, MkHListWitness, RawCmdArg}
 import shapeless._
 import shapeless.labelled.FieldType
 
@@ -127,6 +127,22 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
   object Parameter {
     def apply[A](implicit param: Parameter[A]): Parameter[A] = param
+
+    def mkNamed[A: HasName](paramName: String, choices: => Iterable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
+      override def name: String = paramName
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], Set[A])] = ScammanderHelper.parseMany(name, xs, choices)
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, choices)
+    }
   }
 
   //Helper parameters and modifiers

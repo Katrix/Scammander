@@ -23,7 +23,7 @@ package net.katsstuff.scammander
 import java.util.Locale
 import java.util.regex.Pattern
 
-import net.katsstuff.scammander.misc.RawCmdArg
+import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 
 object ScammanderHelper {
 
@@ -41,6 +41,10 @@ object ScammanderHelper {
     if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
   }
 
+  def suggestions[A](xs: List[RawCmdArg], choices: => Iterable[A])(
+      implicit named: HasName[A]
+  ): (List[RawCmdArg], Seq[String]) = suggestions(xs, choices.map(named.apply))
+
   def parse[A](
       name: String,
       xs: List[RawCmdArg],
@@ -54,6 +58,10 @@ object ScammanderHelper {
         .map(xs.tail -> _)
     } else Left(notEnoughArgs)
   }
+
+  def parse[A](name: String, xs: List[RawCmdArg], choices: Iterable[A])(
+      implicit named: HasName[A]
+  ): Either[CommandFailure, (List[RawCmdArg], A)] = parse(name, xs, choices.map(obj => named(obj) -> obj).toMap)
 
   //Based on PatternMatchingCommandElement in Sponge
   def parseMany[A](
@@ -83,4 +91,9 @@ object ScammanderHelper {
         }
     } else Left(notEnoughArgs)
   }
+
+  def parseMany[A](name: String, xs: List[RawCmdArg], choices: Iterable[A])(
+      implicit named: HasName[A]
+  ): Either[CommandFailure, (List[RawCmdArg], Set[A])] =
+    parseMany(name, xs, choices.map(obj => named(obj).toLowerCase(Locale.ROOT) -> obj).toMap)
 }

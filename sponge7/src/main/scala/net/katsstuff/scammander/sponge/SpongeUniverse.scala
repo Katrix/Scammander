@@ -48,7 +48,7 @@ import org.spongepowered.api.{CatalogType, Sponge}
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
-import net.katsstuff.scammander.misc.RawCmdArg
+import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless._
@@ -113,14 +113,20 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       if (xs.nonEmpty) {
         val head = xs.head.content
 
-        //TODO: Should an empty check be done here
-        val players = if (head.startsWith("@")) {
-          Selector.parse(xs.head.content).resolve(source).asScala.collect {
-            case player: Player => player
-          }
-        } else optionalToOption(Sponge.getServer.getPlayer(head)).toSet
+        if (head.startsWith("@")) {
+          val players = Selector
+            .parse(xs.head.content)
+            .resolve(source)
+            .asScala
+            .collect {
+              case player: Player => player
+            }
+            .toSet
 
-        Right((xs.tail, players.toSet))
+          Right(xs.tail -> players)
+        } else {
+          ScammanderHelper.parseMany(name, xs, Sponge.getServer.getOnlinePlayers.asScala)
+        }
       } else Left(ScammanderHelper.notEnoughArgs)
     }
 
@@ -158,7 +164,6 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Set[A])] = {
       if (xs.nonEmpty) {
-        //TODO: Should an empty check be done here
         val entities = Selector.parse(xs.head.content).resolve(source).asScala.collect {
           case EntityType(entity) => entity
         }
@@ -213,29 +218,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       })
   }
 
-  implicit val worldParam: Parameter[Set[WorldProperties]] = new Parameter[Set[WorldProperties]] {
-    override def name: String = "world"
-
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], Set[WorldProperties])] =
-      ScammanderHelper.parseMany(
-        name,
-        xs,
-        Sponge.getServer.getAllWorldProperties.asScala
-          .map(obj => obj.getWorldName.toLowerCase(Locale.ROOT) -> obj)
-          .toMap
-      )
-
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
-      ScammanderHelper.suggestions(xs, Sponge.getServer.getAllWorldProperties.asScala.map(_.getWorldName))
-  }
+  implicit val worldParam: Parameter[Set[WorldProperties]] =
+    Parameter.mkNamed("world", Sponge.getServer.getAllWorldProperties.asScala)
 
   implicit val vector3dParam: Parameter[Vector3d] = new Parameter[Vector3d] {
     override def name: String = "vector3"
@@ -337,52 +321,13 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   implicit def catalogedParam[A <: CatalogType](
       implicit classTag: ClassTag[A],
       typeable: Typeable[A]
-  ): Parameter[Set[A]] =
-    new Parameter[Set[A]] {
-      private val clazz = classTag.runtimeClass.asInstanceOf[Class[A]]
-
-      override def name: String = typeable.describe
-
-      override def parse(
-          source: CommandSource,
-          extra: Unit,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], Set[A])] =
-        ScammanderHelper.parseMany(
-          name,
-          xs,
-          Sponge.getRegistry.getAllOf(clazz).asScala.map(obj => obj.getId.toLowerCase(Locale.ROOT) -> obj).toMap
-        )
-
-      override def suggestions(
-          source: CommandSource,
-          extra: Location[World],
-          xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) =
-        ScammanderHelper.suggestions(xs, Sponge.getRegistry.getAllOf(clazz).asScala.map(_.getId))
-    }
-
-  implicit val pluginParam: Parameter[Set[PluginContainer]] = new Parameter[Set[PluginContainer]] {
-    override def name: String = "plguin"
-
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], Set[PluginContainer])] =
-      ScammanderHelper.parseMany(
-        name,
-        xs,
-        Sponge.getPluginManager.getPlugins.asScala.map(obj => obj.getId.toLowerCase(Locale.ROOT) -> obj).toMap
-      )
-
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
-      ScammanderHelper.suggestions(xs, Sponge.getPluginManager.getPlugins.asScala.map(_.getId))
+  ): Parameter[Set[A]] = {
+    val clazz = classTag.runtimeClass.asInstanceOf[Class[A]]
+    Parameter.mkNamed(typeable.describe, Sponge.getRegistry.getAllOf(clazz).asScala)
   }
+
+  implicit val pluginParam: Parameter[Set[PluginContainer]] =
+    Parameter.mkNamed("plugin", Sponge.getPluginManager.getPlugins.asScala)
 
   implicit val ipParam: Parameter[InetAddress] = new Parameter[InetAddress] {
     override def name: String = "ip"
@@ -443,6 +388,11 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   }
 
   //TODO: text
+
+  implicit val playerHasName:                        HasName[Player]          = (a: Player) => a.getName
+  implicit val worldHasName:                         HasName[WorldProperties] = (a: WorldProperties) => a.getWorldName
+  implicit def catalogTypeHasName[A <: CatalogType]: HasName[A]               = (a: A) => a.getId
+  implicit val pluginHasName:                        HasName[PluginContainer] = (a: PluginContainer) => a.getId
 
   trait Targeter[A] {
     def getTarget(source: CommandSource, pos: Int): CommandStep[A]
