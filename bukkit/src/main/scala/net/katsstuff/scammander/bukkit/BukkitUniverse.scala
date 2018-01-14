@@ -98,11 +98,10 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         ScammanderHelper.parseMany(name, xs, users)
       }
 
-      players.map(t => t._1 -> t._2.map(player => player: OfflinePlayer)).left.flatMap { e1 =>
-        users.left.map { e2 =>
-          e1.merge(e2)
-        }
-      }
+      for {
+        e1 <- players.map(t => t._1 -> t._2.map(player => player: OfflinePlayer)).left
+        e2 <- users.left
+      } yield e1.merge(e2)
     }
 
     override def suggestions(

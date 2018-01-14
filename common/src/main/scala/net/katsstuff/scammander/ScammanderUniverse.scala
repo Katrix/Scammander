@@ -297,9 +297,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           if (ys.nonEmpty) {
             val h = ys.head
             if (h.content == flagName) {
-              flagParam.parse(source, extra, ys.tail).map(t => (acc ::: t._1, ValueFlag(Some(t._2))))
+              flagParam.parse(source, extra, ys.tail).map(t => (acc reverse_::: t._1, ValueFlag(Some(t._2))))
             } else inner(ys.tail, h :: acc)
-          } else Right((acc, ValueFlag(None)))
+          } else Right((acc.reverse, ValueFlag(None)))
         }
 
         inner(xs, Nil)
@@ -330,9 +330,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           if (ys.nonEmpty) {
             val h = ys.head
             if (h.content == flagName) {
-              Right((ys.tail ::: acc, BooleanFlag(true)))
+              Right((ys.tail reverse_::: acc, BooleanFlag(true)))
             } else inner(ys.tail, h :: acc)
-          } else Right((acc, BooleanFlag(false)))
+          } else Right((acc.reverse, BooleanFlag(false)))
         }
 
         inner(xs, Nil)
@@ -356,11 +356,15 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         source: RootSender,
         extra: RunExtra,
         xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], Flags[A, B])] =
+    ): CommandStep[(List[RawCmdArg], Flags[A, B])] = {
+      println(s"Start $xs")
       for {
         t1 <- flagsParam.parse(source, extra, xs)
+        _ = println(s"T1 $t1")
         t2 <- paramParam.parse(source, extra, t1._1)
+        _ = println(s"T2 $t2")
       } yield t2._1 -> Flags(t1._2, t2._2)
+    }
 
     override def suggestions(
         source: RootSender,
@@ -394,9 +398,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           extra: RunExtra,
           xs: List[RawCmdArg]
       ): CommandStep[(List[RawCmdArg], OrSource[Base])] = {
-        val res = param.parse(source, extra, xs).left.flatMap { e1 =>
-          validator.validate(source).map(xs -> _).left.map(e2 => e1.merge(e2))
-        }
+        val res = for {
+          e1 <- param.parse(source, extra, xs).left
+          e2 <- validator.validate(source).map(xs -> _).left
+        } yield e1.merge(e2)
 
         res.map(t => t._1 -> Or(t._2))
       }
@@ -606,7 +611,7 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
         for {
           t1 <- hParam.value.parse(source, extra, xs)
           t2 <- tParam.value.parse(source, extra, t1._1)
-        } yield (Nil, labelled.field[HK](t1._2) :: t2._2)
+        } yield (t2._1, labelled.field[HK](t1._2) :: t2._2)
       }
 
       override def suggestions(
@@ -618,6 +623,13 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
         val (rest, t) = tParam.value.suggestions(source, extra, ys)
 
         (rest, h ++ t)
+      }
+
+      override def usage(source: RootSender): String = {
+        lazy val hUsage = hName.value.name
+        lazy val tUsage = tParam.value.usage(source)
+
+        if(tUsage.isEmpty) s"<$hUsage>" else s"<$hUsage> $tUsage"
       }
     }
 
@@ -652,6 +664,13 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
         val rest = if (hRest.lengthCompare(tRest.size) > 0) hRest else tRest
         (rest, h ++ t)
       }
+
+      override def usage(source: RootSender): String = {
+        lazy val hUsage = hParam.value.usage(source)
+        lazy val tUsage = tParam.value.usage(source)
+
+        if(tUsage.isEmpty) s"($hUsage)" else s"($hUsage)|$tUsage"
+      }
     }
 }
 
@@ -671,7 +690,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
         for {
           t1 <- hParam.value.parse(source, extra, xs)
           t2 <- tParam.value.parse(source, extra, t1._1)
-        } yield (Nil, t1._2 :: t2._2)
+        } yield (t1._1, t1._2 :: t2._2)
       }
 
       override def suggestions(
@@ -684,6 +703,13 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
 
         (rest, h ++ t)
       }
+
+      override def usage(source: RootSender): String = {
+        lazy val hUsage = hParam.value.usage(source)
+        lazy val tUsage = tParam.value.usage(source)
+
+        if(tUsage.isEmpty) hUsage else s"$hUsage $tUsage"
+      }
     }
 
   implicit val hNilParam: Parameter[HNil] = new Parameter[HNil] {
@@ -694,6 +720,8 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
       (xs, Nil)
+
+    override def usage(source: RootSender): String = ""
   }
 
   implicit def cConsParam[H, T <: Coproduct](
@@ -725,6 +753,13 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
         val rest = if (hRest.lengthCompare(tRest.size) > 0) hRest else tRest
         (rest, h ++ t)
       }
+
+      override def usage(source: RootSender): String = {
+        lazy val hUsage = hParam.value.usage(source)
+        lazy val tUsage = tParam.value.usage(source)
+
+        if(tUsage.isEmpty) hUsage else s"$hUsage|$tUsage"
+      }
     }
 
   implicit val cNilParam: Parameter[CNil] = new Parameter[CNil] {
@@ -735,5 +770,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
       (xs, Nil)
+
+    override def usage(source: RootSender): String = ""
   }
 }

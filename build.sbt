@@ -18,7 +18,8 @@ lazy val common = project.settings(
   commonSettings,
   name := "scammander",
   version := "0.1",
-  libraryDependencies += "com.chuusai" %% "shapeless" % "2.3.3"
+  libraryDependencies += "com.chuusai"   %% "shapeless" % "2.3.3",
+  libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % Test
 )
 
 lazy val sponge7 = project

@@ -201,11 +201,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         ScammanderHelper.parseMany(name, xs, users)
       }
 
-      players.map(t => t._1 -> t._2.map(player => player: User)).left.flatMap { e1 =>
-        users.left.map { e2 =>
-          e1.merge(e2)
-        }
-      }
+      for {
+        e1 <- players.map(t => t._1 -> t._2.map(player => player: User)).left
+        e2 <- users.left
+      } yield e1.merge(e2)
     }
 
     override def suggestions(
@@ -289,11 +288,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         }
         .getOrElse {
           for {
-            wt <- oneWorldParam.parse(source, extra, xs).map(t => t._1 -> t._2.value).left.flatMap { e1 =>
-              locationSender.validate(source).map(pos => xs -> pos.getExtent.getProperties).left.map { e2 =>
-                e1.merge(e2)
-              }
-            }
+            wt <- for {
+              e1 <- oneWorldParam.parse(source, extra, xs).map(t => t._1 -> t._2.value).left
+              e2 <- locationSender.validate(source).map(pos => xs -> pos.getExtent.getProperties).left
+            } yield e1.merge(e2)
             vt <- vector3dParam.parse(source, extra, wt._1)
           } yield {
             val world = Sponge.getServer.getWorld(wt._2.getUniqueId).get()
@@ -452,13 +450,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         extra: Unit,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], OrTarget[Base])] = {
-      val ret = parameter.parse(source, extra, xs).left.flatMap { e1 =>
-        val res = targeter.getTarget(source, xs.headOption.map(_.start).getOrElse(-1)).left.map { e2 =>
-          e1.merge(e2)
-        }
-
-        res.map(xs -> _)
-      }
+      val ret = for {
+        e1 <- parameter.parse(source, extra, xs).left
+        e2 <- targeter.getTarget(source, xs.headOption.map(_.start).getOrElse(-1)).map(xs -> _).left
+      } yield e1.merge(e2)
 
       ret.map(t => t._1 -> Or(t._2))
     }
