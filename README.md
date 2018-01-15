@@ -6,6 +6,14 @@ Scammander is a command library for Scala that focues on typesafe and simple com
 Big thanks to the Sponge library for some of the ideas and designs that are used in Scammander. If you know how to use one, using the other will hopefully not be too hard.
 
 ## Basic Usage
+While Scammander is still early in development, you can try Scammander by adding one of these to your `build.sbt`.
+```scala
+//Core library. Use this if you want to create an implmentation for a new platform
+libraryDependencies += "net.katsstuff" %% "scammander"         % "0.1.0"
+libraryDependencies += "net.katsstuff" %% "scammander-sponge7" % "0.1.0" //Sponge API 7 platform
+libraryDependencies += "net.katsstuff" %% "scammander-bukkit"  % "0.1.0" //Bukkit platform
+```
+
 So, how do you use Scammander. Let's go over how to use it with Sponge. Usage for the other platforms should be somewhat similar. All examples here assumes.
 ```scala
 import net.katsstuff.scammander.sponge._
