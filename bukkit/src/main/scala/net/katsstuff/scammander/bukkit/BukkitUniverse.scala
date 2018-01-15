@@ -44,31 +44,41 @@ import shapeless._
 
 trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
 
-  case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
-      extends ProxyParameter[A, A] {
-    val perm: String = w.value
+  /**
+    * A class to use for parameter that should require a specific permission.
+    */
+  case class NeedPermission[S <: String, A](value: A)
 
-    override def parse(
-        source: CommandSender,
-        extra: BukkitExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], A)] =
-      if (source.hasPermission(perm)) param.parse(source, extra, xs)
-      else
-        Left(
-          CommandUsageError(
-            "You do not have the permissions needed to use this parameter",
-            xs.headOption.map(_.start).getOrElse(-1)
+  implicit def needPermissionParam[S <: String, A](
+      implicit param0: Parameter[A],
+      w: Witness.Aux[S]
+  ): Parameter[NeedPermission[S, A]] =
+    new ProxyParameter[NeedPermission[S, A], A] {
+      override def param: Parameter[A] = param0
+
+      val perm: String = w.value
+
+      override def parse(
+          source: CommandSender,
+          extra: BukkitExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], NeedPermission[S, A])] =
+        if (source.hasPermission(perm)) param.parse(source, extra, xs).map(t => t._1 -> NeedPermission(t._2))
+        else
+          Left(
+            CommandUsageError(
+              "You do not have the permissions needed to use this parameter",
+              xs.headOption.map(_.start).getOrElse(-1)
+            )
           )
-        )
 
-    override def suggestions(
-        source: CommandSender,
-        extra: BukkitExtra,
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
-      if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
-  }
+      override def suggestions(
+          source: CommandSender,
+          extra: BukkitExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) =
+        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
+    }
 
   //TODO: Selector with NMS
   implicit val allPlayerParam: Parameter[Set[Player]] = Parameter.mkNamed("player", Bukkit.getOnlinePlayers.asScala)
@@ -258,7 +268,11 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         args: Array[String]
     ): util.List[String] =
       command
-        .suggestions(sender, BukkitExtra(bukkitCommand, alias), ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
+        .suggestions(
+          sender,
+          BukkitExtra(bukkitCommand, alias),
+          ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
+        )
         .asJava
 
     def register(plugin: JavaPlugin, name: String): Unit = {

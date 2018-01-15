@@ -55,52 +55,76 @@ import shapeless._
 
 trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
 
-  def optionalToOption[A](optional: Optional[A]): Option[A] = if (optional.isPresent) Some(optional.get()) else None
-
   //Helpers used when registering command
 
+  /**
+    * Helper for creating an alias when registering a command.
+    */
   object Alias {
     def apply(first: String, aliases: String*): Seq[String] = first +: aliases
   }
 
+  /**
+    * Helper for creating a alias when registering a command.
+    */
   object Permission {
     def apply(perm: String): Some[String] = Some(perm)
     val none:                None.type    = None
   }
 
+  /**
+    * Helper for creating a help when registering a command.
+    */
   object Help {
     def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
     def apply(text: Text):               CommandSource => Option[Text] = _ => Some(text)
     val none:                            CommandSource => None.type    = _ => None
   }
 
+  /**
+    * Helper for creating an description when registering a command.
+    */
   object Description {
     def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
     def apply(text: Text):               CommandSource => Option[Text] = _ => Some(text)
     val none:                            CommandSource => None.type    = _ => None
   }
 
-  case class NeedPermission[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S])
-      extends ProxyParameter[A, A] {
-    val perm: String = w.value
+  /**
+    * A class to use for parameter that should require a specific permission.
+    */
+  case class NeedPermission[S <: String, A](value: A)
 
-    override def parse(source: CommandSource, extra: Unit, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
-      if (source.hasPermission(perm)) param.parse(source, extra, xs)
-      else
-        Left(
-          CommandUsageError(
-            "You do not have the permissions needed to use this parameter",
-            xs.headOption.map(_.start).getOrElse(-1)
+  implicit def needPermissionParam[S <: String, A](
+      implicit param0: Parameter[A],
+      w: Witness.Aux[S]
+  ): Parameter[NeedPermission[S, A]] =
+    new ProxyParameter[NeedPermission[S, A], A] {
+      override def param: Parameter[A] = param0
+
+      val perm: String = w.value
+
+      override def parse(
+          source: CommandSource,
+          extra: Unit,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], NeedPermission[S, A])] =
+        if (source.hasPermission(perm)) param.parse(source, extra, xs).map(t => t._1 -> NeedPermission(t._2))
+        else
+          Left(
+            CommandUsageError(
+              "You do not have the permissions needed to use this parameter",
+              xs.headOption.map(_.start).getOrElse(-1)
+            )
           )
-        )
 
-    override def suggestions(
-        source: CommandSource,
-        extra: Location[World],
-        xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
-      if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
-  }
+      override def suggestions(
+          source: CommandSource,
+          extra: Location[World],
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) =
+        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
+    }
 
   implicit val allPlayerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
     override def name: String = "player"
@@ -290,7 +314,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
           for {
             wt <- for {
               e1 <- oneWorldParam.parse(source, extra, xs).map(t => t._1 -> t._2.value).left
-              e2 <- locationSender.validate(source).map(pos => xs -> pos.getExtent.getProperties).left
+              e2 <- locationSender.validate(source).map(pos => xs        -> pos.getExtent.getProperties).left
             } yield e1.merge(e2)
             vt <- vector3dParam.parse(source, extra, wt._1)
           } yield {
@@ -392,6 +416,9 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   implicit def catalogTypeHasName[A <: CatalogType]: HasName[A]               = (a: A) => a.getId
   implicit val pluginHasName:                        HasName[PluginContainer] = (a: PluginContainer) => a.getId
 
+  /**
+    * A typeclass which returns what the sender is currently targeting.
+    */
   trait Targeter[A] {
     def getTarget(source: CommandSource, pos: Int): CommandStep[A]
   }
@@ -437,6 +464,9 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     }
   }
 
+  /**
+    * Used with [[Or]] to get what the sender is targeting.
+    */
   sealed trait Target
   type OrTarget[Base] = Base Or Target
   implicit def orTargetParam[Base](
