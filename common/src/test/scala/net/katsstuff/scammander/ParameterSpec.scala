@@ -7,7 +7,9 @@ import net.katsstuff.scammander.misc.RawCmdArg
 import shapeless.{Witness => W}
 import shapeless._
 
-class ParameterSpec extends FunSuite with Matchers with ScammanderUniverse[Unit, Unit, Unit] {
+class ParameterSpec extends FunSuite with Matchers with ScammanderUniverse[Unit, Unit, Unit, Unit] {
+
+  override protected val defaultCommandSuccess: Unit = ()
 
   def mkArgs(arguments: String): List[RawCmdArg] = ScammanderHelper.stringToRawArgsQuoted(arguments)
 

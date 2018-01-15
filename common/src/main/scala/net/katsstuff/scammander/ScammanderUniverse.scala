@@ -33,9 +33,16 @@ import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 import shapeless._
 import shapeless.labelled.FieldType
 
-trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
-    extends NormalParametersInstances[RootSender, RunExtra, TabExtra]
-    with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra] {
+trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
+    extends NormalParametersInstances[RootSender, RunExtra, TabExtra, Result]
+    with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result] {
+
+  protected val defaultCommandSuccess: Result
+
+  /**
+    * A successful run of a command.
+    */
+  case class CommandSuccess(result: Result = defaultCommandSuccess)
 
   /**
     * A typeclass which helps convert a user into another type.
@@ -60,11 +67,6 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
   //Results and steps
 
-  type CommandResult = scammander.CommandResult
-
-  type CommandSuccess = scammander.CommandSuccess
-  val CommandSuccess: scammander.CommandSuccess.type = scammander.CommandSuccess
-
   type CommandFailure = scammander.CommandFailure
 
   type CommandError = scammander.CommandError
@@ -88,7 +90,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     */
   abstract class Command[Sender, Param](implicit val userValidator: UserValidator[Sender], val par: Parameter[Param]) {
 
-    def run(source: Sender, extra: RunExtra, arg: Param): CommandResult
+    def run(source: Sender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess]
 
     def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): Seq[String] =
       par.suggestions(source, extra, strArgs)._2
@@ -101,41 +103,58 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       * Create a simple command from a function that takes a parameter of the given type.
       */
     def simple[Param](
-        runCmd: (RootSender, RunExtra, Param) => CommandResult
+        runCmd: (RootSender, RunExtra, Param) => CommandStep[CommandSuccess]
     )(implicit parameter: Parameter[Param]): Command[RootSender, Param] =
       new Command[RootSender, Param] {
-        override def run(source: RootSender, extra: RunExtra, arg: Param): CommandResult = runCmd(source, extra, arg)
+        override def run(source: RootSender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
+          runCmd(source, extra, arg)
       }
 
     /**
       * Create a command from a function that takes a parameter and sender of the given types.
       */
     def withSender[Sender, Param](
-        runCmd: (Sender, RunExtra, Param) => CommandResult
+        runCmd: (Sender, RunExtra, Param) => CommandStep[CommandSuccess]
     )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
       new Command[Sender, Param] {
-        override def run(source: Sender, extra: RunExtra, arg: Param): CommandResult = runCmd(source, extra, arg)
+        override def run(source: Sender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
+          runCmd(source, extra, arg)
       }
 
     /**
-      * Creates a command success result.
+      * Creates a command success step.
       */
-    def success(count: Int = 1): CommandSuccess = CommandSuccess(count)
+    def success(result: Result = defaultCommandSuccess): CommandStep[CommandSuccess] = Right(CommandSuccess(result))
 
     /**
-      * Creates a generic command error result.
+      * Creates a generic command error step.
       */
-    def error(msg: String):                 CommandError       = CommandError(msg)
+    def error(msg: String): CommandStep[CommandSuccess] = Left(CommandError(msg))
 
     /**
-      * Creates a syntax command error result.
+      * Creates a syntax command error step.
       */
-    def syntaxError(msg: String, pos: Int): CommandSyntaxError = CommandSyntaxError(msg, pos)
+    def syntaxError(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandSyntaxError(msg, pos))
 
     /**
-      * Creates a usage  command error result.
+      * Creates a usage  command error step.
       */
-    def usageError(msg: String, pos: Int):  CommandUsageError  = CommandUsageError(msg, pos)
+    def usageError(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandUsageError(msg, pos))
+
+    /**
+      * Creates a generic command error.
+      */
+    def errorRaw(msg: String): CommandFailure = CommandError(msg)
+
+    /**
+      * Creates a syntax command error.
+      */
+    def syntaxErrorRaw(msg: String, pos: Int): CommandSyntaxError = CommandSyntaxError(msg, pos)
+
+    /**
+      * Creates a usage  command error.
+      */
+    def usageErrorRaw(msg: String, pos: Int): CommandUsageError = CommandUsageError(msg, pos)
   }
 
   /**
@@ -497,8 +516,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 }
 
-trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
-  self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
+trait NormalParametersInstances[RootSender, RunExtra, TabExtra, Result] {
+  self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
   def primitiveParam[A](parName: String, s: String => A): Parameter[A] =
     new Parameter[A] {
       override def name: String = parName
@@ -649,9 +668,9 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
   }
 }
 
-trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
-    extends ParameterDeriver[RootSender, RunExtra, TabExtra] {
-  self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
+trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result]
+    extends ParameterDeriver[RootSender, RunExtra, TabExtra, Result] {
+  self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
 
   implicit def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Parameter[Gen]): Parameter[A] =
     new ProxyParameter[A, Gen] {
@@ -741,7 +760,8 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
     }
 }
 
-trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
+trait ParameterDeriver[RootSender, RunExtra, TabExtra, Result] {
+  self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
   implicit def hConsParam[H, T <: HList](
       implicit hParam: Lazy[Parameter[H]],
       tParam: Lazy[Parameter[T]]

@@ -32,7 +32,7 @@ import scala.util.Try
 
 import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.command.source.{ProxySource, RemoteSource}
-import org.spongepowered.api.command.{CommandResult => SpongeCommandResult, _}
+import org.spongepowered.api.command._
 import org.spongepowered.api.data.DataContainer
 import org.spongepowered.api.data.persistence.DataTranslators
 import org.spongepowered.api.entity.Entity
@@ -53,7 +53,9 @@ import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless._
 
-trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
+trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World], Int] {
+
+  override protected val defaultCommandSuccess: Int = 1
 
   //Helpers used when registering command
 
@@ -438,7 +440,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
               case EntityCase(e) => e
             }
 
-          target.toRight(Command.usageError("Not looking at an entity", pos))
+          target.toRight(Command.usageErrorRaw("Not looking at an entity", pos))
         }
       }
     }
@@ -447,7 +449,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       entitySender[Entity].validate(source).flatMap { entity =>
         val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
 
-        res.toRight(Command.usageError("Not looking at an block", pos))
+        res.toRight(Command.usageErrorRaw("Not looking at an block", pos))
       }
     }
 
@@ -545,27 +547,28 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
       extends CommandCallable {
 
-    override def process(source: CommandSource, arguments: String): SpongeCommandResult = {
+    override def process(source: CommandSource, arguments: String): CommandResult = {
       val res = for {
         sender <- command.userValidator.validate(source)
         param  <- command.par.parse(source, (), ScammanderHelper.stringToRawArgsQuoted(arguments))
-      } yield command.run(sender, (), param._2)
+        result <- command.run(sender, (), param._2)
+      } yield result
 
-      res.merge match {
-        case CommandSuccess(count) => SpongeCommandResult.successCount(count)
-        case CommandError(msg)     => throw new CommandException(Text.of(msg))
-        case CommandSyntaxError(msg, pos) =>
+      res match {
+        case Right(CommandSuccess(count)) => CommandResult.successCount(count)
+        case Left(CommandError(msg))      => throw new CommandException(Text.of(msg))
+        case Left(CommandSyntaxError(msg, pos)) =>
           val e =
             if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
             else new CommandException(Text.of(msg))
           throw e
-        case CommandUsageError(msg, pos) =>
+        case Left(CommandUsageError(msg, pos)) =>
           //TODO: Custom exception
           val e =
             if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
             else new CommandException(Text.of(msg))
           throw e
-        case e: MultipleCommandErrors => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
+        case Left(e: MultipleCommandErrors) => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
       }
     }
 

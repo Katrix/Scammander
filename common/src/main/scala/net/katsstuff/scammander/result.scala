@@ -21,19 +21,9 @@
 package net.katsstuff.scammander
 
 /**
-  * The result of a using a command.
-  */
-sealed trait CommandResult
-
-/**
-  * A successful run of a command.
-  */
-case class CommandSuccess(count: Int = 1) extends CommandResult
-
-/**
   * Base trait for all command failures.
   */
-sealed trait CommandFailure extends CommandResult {
+sealed trait CommandFailure {
   def msg: String
   def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(Seq(this, failure))
 }

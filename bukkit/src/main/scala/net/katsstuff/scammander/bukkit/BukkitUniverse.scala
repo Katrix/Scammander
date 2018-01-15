@@ -42,7 +42,9 @@ import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
 import shapeless._
 
-trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
+trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra, Boolean] {
+
+  override protected val defaultCommandSuccess: Boolean = true
 
   /**
     * A class to use for parameter that should require a specific permission.
@@ -240,22 +242,23 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
       val res = for {
         sender <- command.userValidator.validate(source)
         param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
-      } yield command.run(sender, extra, param._2)
+        result <- command.run(sender, extra, param._2)
+      } yield result
 
-      res.merge match {
-        case CommandSuccess(_) => true
-        case CommandError(msg) =>
+      res match {
+        case Right(CommandSuccess(result)) => result
+        case Left(CommandError(msg)) =>
           source.sendMessage(ChatColor.RED + msg)
           true
-        case CommandSyntaxError(msg, _) =>
+        case Left(CommandSyntaxError(msg, _)) =>
           //TODO: Show error location
           source.sendMessage(ChatColor.RED + msg)
           true
-        case CommandUsageError(msg, _) =>
+        case Left(CommandUsageError(msg, _)) =>
           //TODO: Show error location
           source.sendMessage(ChatColor.RED + msg)
           true
-        case e: MultipleCommandErrors =>
+        case Left(e: MultipleCommandErrors) =>
           source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
           true
       }
