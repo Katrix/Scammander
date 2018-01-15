@@ -20,4 +20,10 @@
  */
 package net.katsstuff.scammander.misc
 
+/**
+  * A single unparsed argument.
+  * @param start The start position of the argument.
+  * @param end The end position of the argument.
+  * @param content The string content of the argument.
+  */
 case class RawCmdArg(start: Int, end: Int, content: String)

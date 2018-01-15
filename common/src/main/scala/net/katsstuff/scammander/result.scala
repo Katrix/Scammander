@@ -20,24 +20,42 @@
  */
 package net.katsstuff.scammander
 
+/**
+  * The result of a using a command.
+  */
 sealed trait CommandResult
-object CommandResult {
-  def success(count: Int = 1): CommandSuccess = CommandSuccess(count)
-  def error(msg: String):      CommandError   = CommandError(msg)
-}
+
+/**
+  * A successful run of a command.
+  */
 case class CommandSuccess(count: Int = 1) extends CommandResult
+
+/**
+  * Base trait for all command failures.
+  */
 sealed trait CommandFailure extends CommandResult {
   def msg: String
   def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(Seq(this, failure))
 }
-object CommandFailure {
-  def error(msg: String)                 = CommandError(msg)
-  def syntaxError(msg: String, pos: Int) = CommandSyntaxError(msg, pos)
-  def usageError(msg: String, pos: Int)  = CommandUsageError(msg, pos)
-}
-case class CommandError(msg: String)                      extends CommandFailure
+
+/**
+  * A generic command failure.
+  */
+case class CommandError(msg: String) extends CommandFailure
+
+/**
+  * A syntax command failure.
+  */
 case class CommandSyntaxError(msg: String, position: Int) extends CommandFailure
-case class CommandUsageError(msg: String, position: Int)  extends CommandFailure
+
+/**
+  * A usage command failure.
+  */
+case class CommandUsageError(msg: String, position: Int) extends CommandFailure
+
+/**
+  * Represents multiple command failures.
+  */
 case class MultipleCommandErrors(failures: Seq[CommandFailure]) extends CommandFailure {
   override def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(failures :+ failure)
 

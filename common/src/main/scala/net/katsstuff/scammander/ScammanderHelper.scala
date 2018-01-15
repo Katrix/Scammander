@@ -33,9 +33,16 @@ object ScammanderHelper {
 
   val notEnoughArgs = CommandSyntaxError("Not enough arguments", -1)
 
+  /**
+    * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace.
+    */
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 
+  /**
+    * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace
+    * as as they are not quoted.
+    */
   def stringToRawArgsQuoted(argumments: String): List[RawCmdArg] = {
     quotedRegex
       .findAllMatchIn(argumments)
@@ -47,6 +54,10 @@ object ScammanderHelper {
       .toList
   }
 
+  /**
+    * Returns the suggestions for a command given the argument list and
+    * all the possible string suggestions.
+    */
   def suggestions(xs: List[RawCmdArg], choices: => Iterable[String]): (List[RawCmdArg], Seq[String]) = {
     val head = xs.head
     val tail = xs.tail
@@ -54,10 +65,17 @@ object ScammanderHelper {
     if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
   }
 
+  /**
+    * Returns the suggestions for a command given the argument list and
+    * all the possible suggestions.
+    */
   def suggestions[A](xs: List[RawCmdArg], choices: => Iterable[A])(
       implicit named: HasName[A]
   ): (List[RawCmdArg], Seq[String]) = suggestions(xs, choices.map(named.apply))
 
+  /**
+    * Parse a single paramter given the current argument list, and a map of the valid choices.
+    */
   def parse[A](
       name: String,
       xs: List[RawCmdArg],
@@ -72,10 +90,16 @@ object ScammanderHelper {
     } else Left(notEnoughArgs)
   }
 
+  /**
+    * Parse a paramter given the current argument list, and a list of the valid choices.
+    */
   def parse[A](name: String, xs: List[RawCmdArg], choices: Iterable[A])(
       implicit named: HasName[A]
   ): Either[CommandFailure, (List[RawCmdArg], A)] = parse(name, xs, choices.map(obj => named(obj) -> obj).toMap)
 
+  /**
+    * Parse a set for a paramter given the current argument list, and a map of the valid choices.
+    */
   //Based on PatternMatchingCommandElement in Sponge
   def parseMany[A](
       name: String,
@@ -105,6 +129,9 @@ object ScammanderHelper {
     } else Left(notEnoughArgs)
   }
 
+  /**
+    * Parse a set for a paramter given the current argument list, and a list of the valid choices.
+    */
   def parseMany[A](name: String, xs: List[RawCmdArg], choices: Iterable[A])(
       implicit named: HasName[A]
   ): Either[CommandFailure, (List[RawCmdArg], Set[A])] =

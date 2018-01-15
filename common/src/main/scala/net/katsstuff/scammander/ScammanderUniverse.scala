@@ -29,7 +29,7 @@ import scala.annotation.tailrec
 import scala.util.Try
 
 import net.katsstuff.scammander
-import net.katsstuff.scammander.misc.{HasName, MkHListWitness, RawCmdArg}
+import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 import shapeless._
 import shapeless.labelled.FieldType
 
@@ -37,11 +37,21 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     extends NormalParametersInstances[RootSender, RunExtra, TabExtra]
     with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra] {
 
+  /**
+    * A typeclass which helps convert a user into another type.
+    */
   trait UserValidator[A] {
 
+    /**
+      * Validates the sender.
+      */
     def validate(sender: RootSender): CommandStep[A]
   }
   object UserValidator {
+
+    /**
+      * Create a user validator from a function.
+      */
     def mkValidator[A](validator: RootSender => CommandStep[A]): UserValidator[A] =
       (sender: RootSender) => validator(sender)
 
@@ -51,7 +61,6 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   //Results and steps
 
   type CommandResult = scammander.CommandResult
-  val CommandResult: scammander.CommandResult.type = scammander.CommandResult
 
   type CommandSuccess = scammander.CommandSuccess
   val CommandSuccess: scammander.CommandSuccess.type = scammander.CommandSuccess
@@ -74,6 +83,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
   //Commands and parameters
 
+  /**
+    * The base class for a command. Extend from this if you want more control over a command.
+    */
   abstract class Command[Sender, Param](implicit val userValidator: UserValidator[Sender], val par: Parameter[Param]) {
 
     def run(source: Sender, extra: RunExtra, arg: Param): CommandResult
@@ -84,6 +96,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     def usage(source: RootSender): String = par.usage(source)
   }
   object Command {
+
+    /**
+      * Create a simple command from a function that takes a parameter of the given type.
+      */
     def simple[Param](
         runCmd: (RootSender, RunExtra, Param) => CommandResult
     )(implicit parameter: Parameter[Param]): Command[RootSender, Param] =
@@ -91,6 +107,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         override def run(source: RootSender, extra: RunExtra, arg: Param): CommandResult = runCmd(source, extra, arg)
       }
 
+    /**
+      * Create a command from a function that takes a parameter and sender of the given types.
+      */
     def withSender[Sender, Param](
         runCmd: (Sender, RunExtra, Param) => CommandResult
     )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
@@ -98,22 +117,67 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         override def run(source: Sender, extra: RunExtra, arg: Param): CommandResult = runCmd(source, extra, arg)
       }
 
-    def success(count: Int = 1):            CommandSuccess     = CommandSuccess(count)
+    /**
+      * Creates a command success result.
+      */
+    def success(count: Int = 1): CommandSuccess = CommandSuccess(count)
+
+    /**
+      * Creates a generic command error result.
+      */
     def error(msg: String):                 CommandError       = CommandError(msg)
+
+    /**
+      * Creates a syntax command error result.
+      */
     def syntaxError(msg: String, pos: Int): CommandSyntaxError = CommandSyntaxError(msg, pos)
+
+    /**
+      * Creates a usage  command error result.
+      */
     def usageError(msg: String, pos: Int):  CommandUsageError  = CommandUsageError(msg, pos)
   }
 
+  /**
+    * A parameter for a command. Can convert a list of arguments into a given type.
+    * @tparam A The parsed value.
+    */
   trait Parameter[A] {
 
+    /**
+      * The name of the parameter. Will be used in usage.
+      */
     def name: String
 
+    /**
+      * Parse a list of arguments into the type of this parameter.
+      * @param source The command source.
+      * @param extra Extra platform specific info about the command.
+      * @param xs The arguments for the command.
+      * @return A command step with the remaining arguments, and the parsed type.
+      */
     def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)]
 
+    /**
+      * Returns the suggestions for a parameter.
+      * @param source The command source.
+      * @param extra Extra platform specific info about the command.
+      * @param xs The arguments for the command.
+      * @return A list of the remaining arguments, and the suggestions.
+      */
     def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String])
 
+    /**
+      * The usage for this command.
+      */
     def usage(source: RootSender): String = s"<$name>"
   }
+
+  /**
+    * Represents a parameter that wraps another parameter and transforms the parsed value.
+    * @tparam A The new value
+    * @tparam B The old value
+    */
   trait ProxyParameter[A, B] extends Parameter[A] {
     def param: Parameter[B]
 
@@ -128,6 +192,12 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   object Parameter {
     def apply[A](implicit param: Parameter[A]): Parameter[A] = param
 
+    /**
+      * Makes a parameter for a type which has names.
+      * @param paramName The name of the parameter.
+      * @param choices The possible choices for the parameter.
+      * @tparam A The type of parameter.
+      */
     def mkNamed[A: HasName](paramName: String, choices: => Iterable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
       override def name: String = paramName
 
@@ -147,54 +217,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
   //Helper parameters and modifiers
 
-  case class Named[S <: String, A](param: Parameter[A])(implicit w: Witness.Aux[S]) extends ProxyParameter[A, A] {
-    override def name: String = w.value
-
-    override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
-      param.parse(source, extra, xs)
-  }
-
-  case class Choices(name: String, choices: Set[String], sendValid: Boolean = false) extends Parameter[String] {
-    private val choiceMap = choices.map(_.toLowerCase(Locale.ROOT)).map(s => s -> s).toMap
-
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], String)] = {
-      val res = ScammanderHelper.parse("choice", xs, choiceMap)
-      if (sendValid) {
-        val head = xs.head.content
-        res.left.map {
-          case CommandUsageError(_, pos) =>
-            CommandUsageError(s"$head is not a valid parameter.\nValid parameters: ${choices.mkString(", ")}", pos)
-          case other => other
-        }
-      } else res
-    }
-
-    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
-      ScammanderHelper.suggestions(xs, choices)
-  }
-
-  class ChoicesT[Name <: String, L <: HList, SendValid <: Boolean](
-      implicit nameW: Witness.Aux[Name],
-      mkHList: MkHListWitness[L],
-      toTraversable: ops.hlist.ToTraversable.Aux[L, Set, String],
-      sendValidW: Witness.Aux[SendValid]
-  ) extends ProxyParameter[String, String] {
-    private val choices: Set[String] = toTraversable(mkHList.value)
-
-    override val param: Parameter[String] = Choices(nameW.value, choices, sendValidW.value)
-
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], String)] =
-      param.parse(source, extra, xs)
-  }
-
+  /**
+    * Many parameters parse Set[A]. This type converts that into a single A.
+    * If there is not a single A, the parameter fails.
+    */
   case class OnlyOne[A](value: A)
   implicit def onlyOneParam[A](implicit setParam: Parameter[Set[A]]): Parameter[A] =
     new ProxyParameter[A, Set[A]] {
@@ -214,6 +240,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       }
     }
 
+  /**
+    * Parses the remaining arguments as a single string.
+    */
   case class RemainingAsString(string: String) {
     override def toString:               String  = string
     override def hashCode():             Int     = string.hashCode
@@ -234,6 +263,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       (Nil, Nil)
   }
 
+  /**
+    * Parses a given parameter again and again until it fails.
+    */
   case class AllOff[A](values: Seq[A])
   object AllOff {
     implicit def allOfParam[A](implicit param: Parameter[A]): Parameter[AllOff[A]] = new Parameter[AllOff[A]] {
@@ -279,6 +311,12 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     }
   }
 
+  /**
+    * Parses a flag with a value followed by it.
+    * @param value The value if it was present.
+    * @tparam Name The name of the flag.
+    * @tparam A The type of the value.
+    */
   case class ValueFlag[Name <: String, A](value: Option[A])
   implicit def valueFlagParameter[Name <: String, A](
       implicit witness: Witness.Aux[Name],
@@ -315,6 +353,11 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         } else (xs.drop(2), Nil)
     }
 
+  /**
+    * Parses a flag.
+    * @param present If the flag was present.
+    * @tparam Name The name of the flag.
+    */
   case class BooleanFlag[Name <: String](present: Boolean)
   implicit def booleanFlagParameter[Name <: String](implicit witness: Witness.Aux[Name]): Parameter[BooleanFlag[Name]] =
     new Parameter[BooleanFlag[Name]] {
@@ -345,6 +388,13 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
     }
 
+  /**
+    * A helper to group flags together with normal parameters.
+    * @param flags The flags values.
+    * @param parameters The parameter values.
+    * @tparam A The flag parameters.
+    * @tparam B The other value parameters.
+    */
   case class Flags[A, B](flags: A, parameters: B)
   implicit def flagsParameter[A, B](
       implicit flagsParam: Parameter[A],
@@ -382,7 +432,21 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
    */
 
   //Or parameter
-  case class Or[Base, TargetType](value: Base)
+
+  /**
+    * A class which can parse a normal parameter, or can optionally be filled
+    * by some other context.
+    * @param value The parsed value.
+    * @tparam Base The type to parse.
+    * @tparam Context The context type which specifies how to parse the value
+    *                 if it's not present.
+    */
+  case class Or[Base, Context](value: Base)
+
+  /**
+    * Used in [[Or]]. Parse a value, or return the sender as that value.
+    * Requires that a [[UserValidator]] is present for that type.
+    */
   sealed trait Source
   type OrSource[Base] = Base Or Source
 
@@ -410,6 +474,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         validator.validate(source).map(_ => s"[$name]").getOrElse(super.usage(source))
     }
 
+  /**
+    * Given some parsed time, alternatively returns now instead.
+    */
   sealed trait Now
   type OrNow[Base] = Base Or Now
   implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
@@ -629,7 +696,7 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
         lazy val hUsage = hName.value.name
         lazy val tUsage = tParam.value.usage(source)
 
-        if(tUsage.isEmpty) s"<$hUsage>" else s"<$hUsage> $tUsage"
+        if (tUsage.isEmpty) s"<$hUsage>" else s"<$hUsage> $tUsage"
       }
     }
 
@@ -669,7 +736,7 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
         lazy val hUsage = hParam.value.usage(source)
         lazy val tUsage = tParam.value.usage(source)
 
-        if(tUsage.isEmpty) s"($hUsage)" else s"($hUsage)|$tUsage"
+        if (tUsage.isEmpty) s"($hUsage)" else s"($hUsage)|$tUsage"
       }
     }
 }
@@ -708,7 +775,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
         lazy val hUsage = hParam.value.usage(source)
         lazy val tUsage = tParam.value.usage(source)
 
-        if(tUsage.isEmpty) hUsage else s"$hUsage $tUsage"
+        if (tUsage.isEmpty) hUsage else s"$hUsage $tUsage"
       }
     }
 
@@ -758,7 +825,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] { self: ScammanderUnivers
         lazy val hUsage = hParam.value.usage(source)
         lazy val tUsage = tParam.value.usage(source)
 
-        if(tUsage.isEmpty) hUsage else s"$hUsage|$tUsage"
+        if (tUsage.isEmpty) hUsage else s"$hUsage|$tUsage"
       }
     }
 
