@@ -681,12 +681,12 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result]
     extends ParameterDeriver[RootSender, RunExtra, TabExtra, Result] {
   self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
 
-  implicit def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Parameter[Gen]): Parameter[A] =
+  implicit def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Lazy[Parameter[Gen]]): Parameter[A] =
     new ProxyParameter[A, Gen] {
-      override def param: Parameter[Gen] = genParam
+      override def param: Parameter[Gen] = genParam.value
 
       override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
-        genParam.parse(source, extra, xs).map(t => t._1 -> gen.from(t._2))
+        genParam.value.parse(source, extra, xs).map(t => t._1 -> gen.from(t._2))
     }
 
   implicit def hConsLabelledParam[HK <: Symbol, HV, T <: HList](
