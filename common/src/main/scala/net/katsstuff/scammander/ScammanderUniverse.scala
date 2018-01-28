@@ -124,37 +124,42 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
     /**
       * Creates a command success step.
       */
-    def success(result: Result = defaultCommandSuccess): CommandStep[CommandSuccess] = Right(CommandSuccess(result))
+    def successStep(result: Result = defaultCommandSuccess): CommandStep[CommandSuccess] = Right(CommandSuccess(result))
 
     /**
       * Creates a generic command error step.
       */
-    def error(msg: String): CommandStep[CommandSuccess] = Left(CommandError(msg))
+    def errorStep(msg: String): CommandStep[CommandSuccess] = Left(CommandError(msg))
 
     /**
       * Creates a syntax command error step.
       */
-    def syntaxError(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandSyntaxError(msg, pos))
+    def syntaxErrorStep(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandSyntaxError(msg, pos))
 
     /**
       * Creates a usage  command error step.
       */
-    def usageError(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandUsageError(msg, pos))
+    def usageErrorStep(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandUsageError(msg, pos))
+
+    /**
+      * Creates a command success.
+      */
+    def success(result: Result = defaultCommandSuccess): CommandSuccess = CommandSuccess(result)
 
     /**
       * Creates a generic command error.
       */
-    def errorRaw(msg: String): CommandFailure = CommandError(msg)
+    def error(msg: String): CommandFailure = CommandError(msg)
 
     /**
       * Creates a syntax command error.
       */
-    def syntaxErrorRaw(msg: String, pos: Int): CommandSyntaxError = CommandSyntaxError(msg, pos)
+    def syntaxError(msg: String, pos: Int): CommandSyntaxError = CommandSyntaxError(msg, pos)
 
     /**
       * Creates a usage  command error.
       */
-    def usageErrorRaw(msg: String, pos: Int): CommandUsageError = CommandUsageError(msg, pos)
+    def usageError(msg: String, pos: Int): CommandUsageError = CommandUsageError(msg, pos)
   }
 
   /**
