@@ -163,7 +163,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
       if (arg.startsWith("~")) {
         relativeToOpt
-          .toRight(CommandUsageError("Relative position specified but source does not have a position", start))
+          .toRight(Command.usageError("Relative position specified but source does not have a position", start))
           .flatMap { relativeTo =>
             val newArg = arg.substring(1)
             if (newArg.isEmpty) Right(xs.tail -> relativeTo)

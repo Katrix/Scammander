@@ -280,7 +280,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
       if (arg.startsWith("~")) {
         relativeToOpt
-          .toRight(CommandUsageError("Relative position specified but source does not have a position", start))
+          .toRight(Command.usageError("Relative position specified but source does not have a position", start))
           .flatMap { relativeTo =>
             val newArg = arg.substring(1)
             if (newArg.isEmpty) Right(xs.tail -> relativeTo)
@@ -440,7 +440,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
               case EntityCase(e) => e
             }
 
-          target.toRight(Command.usageErrorRaw("Not looking at an entity", pos))
+          target.toRight(Command.usageError("Not looking at an entity", pos))
         }
       }
     }
@@ -449,7 +449,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       entitySender[Entity].validate(source).flatMap { entity =>
         val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
 
-        res.toRight(Command.usageErrorRaw("Not looking at an block", pos))
+        res.toRight(Command.usageError("Not looking at an block", pos))
       }
     }
 
