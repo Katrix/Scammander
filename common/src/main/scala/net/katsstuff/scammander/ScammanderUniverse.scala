@@ -197,6 +197,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
     def usage(source: RootSender): String = s"<$name>"
   }
 
+  implicit class OptionOps[A](val option: Option[A]) {
+    def toStep(error: => String): CommandStep[A] = option.toRight(CommandError(error))
+  }
+
   /**
     * Represents a parameter that wraps another parameter and transforms the parsed value.
     * @tparam A The new value
