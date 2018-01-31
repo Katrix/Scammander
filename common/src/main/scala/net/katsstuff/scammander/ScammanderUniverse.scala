@@ -454,10 +454,26 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
     }
   }
 
-  /*TODO: Find way to use Option class instead
-    class Optional[A]
-    class OptionalWeak[A]
-   */
+  implicit def optionParam[A](implicit param: Parameter[A]): Parameter[Option[A]] = new Parameter[Option[A]] {
+
+    override def name: String = param.name
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Option[A])] = {
+      val some = param.parse(source, extra, xs).map(t => t._1 -> Some(t._2))
+      val none = Right(xs -> None)
+
+      some.fold(_ => none, Right.apply)
+    }
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      param.suggestions(source, extra, xs)
+
+    override def usage(source: RootSender): String = s"[${param.name}]"
+  }
 
   //Or parameter
 
@@ -681,7 +697,10 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result]
     extends ParameterDeriver[RootSender, RunExtra, TabExtra, Result] {
   self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
 
-  implicit def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Lazy[Parameter[Gen]]): Parameter[A] =
+  implicit def genParam[A, Gen](
+      implicit gen: LabelledGeneric.Aux[A, Gen],
+      genParam: Lazy[Parameter[Gen]]
+  ): Parameter[A] =
     new ProxyParameter[A, Gen] {
       override def param: Parameter[Gen] = genParam.value
 
