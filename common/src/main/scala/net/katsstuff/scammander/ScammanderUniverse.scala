@@ -55,6 +55,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
     def validate(sender: RootSender): CommandStep[A]
   }
   object UserValidator {
+    def apply[A](implicit validator: UserValidator[A]): UserValidator[A] = validator
 
     /**
       * Create a user validator from a function.
