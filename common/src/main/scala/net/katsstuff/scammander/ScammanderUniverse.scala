@@ -244,6 +244,79 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
     }
   }
 
+  /**
+    * Represents a named command. If one of these are in the implicit scope,
+    * you can use a [[DynamicCommand]] in you command.
+    * @param names The names for the command
+    * @param command A function that returns the command itself
+    * @param identifier A type level identifier for the command
+    * @tparam Args The arguments needed to use this command
+    * @tparam Identifier A type level identifier for the command
+    * @tparam Sender The sender type of the command
+    * @tparam Param The parameter type for the command
+    */
+  case class NamedCommand[Args, Identifier, Sender, Param](
+      names: Seq[String],
+      command: Args => Command[Sender, Param],
+      identifier: Identifier
+  )
+
+  def dynamicCommandOf[Args, Identifier, Sender, Param](
+      command: Args => Command[Sender, Param],
+      identifier: Identifier
+  ) = new GetDynamicCommandType[Args, Identifier, Sender, Param]
+
+  class GetDynamicCommandType[Args, Identifier, Sender, Param] {
+    type T = DynamicCommand[Args, Identifier, Sender, Param]
+  }
+
+  case class DynamicCommand[Args, Identifier, Sender, Param](
+      names: Seq[String],
+      command: Args => Command[Sender, Param],
+      identifier: Identifier,
+      validator: UserValidator[Sender],
+      parameter: Parameter[Param]
+  )
+
+  implicit def dynamicCommandParameter[Args, Identifier, Sender, Param](
+      implicit cmd: NamedCommand[Args, Identifier, Sender, Param],
+      validator: UserValidator[Sender],
+      parameter: Parameter[Param]
+  ): Parameter[DynamicCommand[Args, Identifier, Sender, Param]] =
+    new Parameter[DynamicCommand[Args, Identifier, Sender, Param]] {
+      private val dynamic = DynamicCommand(cmd.names, cmd.command, cmd.identifier, validator, parameter)
+
+      override def name: String = cmd.names.mkString("|")
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], DynamicCommand[Args, Identifier, Sender, Param])] =
+        ScammanderHelper.parse(name, xs, cmd.names.map(_ -> dynamic).toMap)
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) =
+        ScammanderHelper.suggestions(xs, cmd.names)
+    }
+
+  implicit val rawCmdArgsParam: Parameter[List[RawCmdArg]] = new Parameter[List[RawCmdArg]] {
+
+    override def name: String = "raw..."
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], List[RawCmdArg])] = Right((Nil, xs))
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (Nil, Nil)
+  }
+
   //Helper parameters and modifiers
 
   /**
