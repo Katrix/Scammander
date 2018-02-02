@@ -42,7 +42,17 @@ import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
 import shapeless._
 
-trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra, Boolean] {
+trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
+
+  override protected type Result             = Boolean
+  override protected type StaticChildCommand = ChildCommand
+
+  case class ChildCommand(
+      command: BukkitCommandWrapper[_, _],
+      permission: String,
+      help: String,
+      description: String
+  )
 
   override protected val defaultCommandSuccess: Boolean = true
 
@@ -184,6 +194,11 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toBukkit: BukkitCommandWrapper[Sender, Param] = BukkitCommandWrapper(command)
+    def toBukkitChild(
+        permission: String = "",
+        help: String = "",
+        description: String = ""
+    ): ChildCommand = ChildCommand(command.toBukkit, permission, help, description)
 
     def register(plugin: JavaPlugin, name: String): Unit = toBukkit.register(plugin, name)
   }
@@ -237,30 +252,39 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         label: String,
         args: Array[String]
     ): Boolean = {
-      val extra = BukkitExtra(bukkitCommand, label)
+      if (args.nonEmpty && command.children.contains(args.head)) {
+        val childCommand = command.children(args.head)
+        if (childCommand.permission.isEmpty || source.hasPermission(childCommand.permission)) {
+          childCommand.command.onCommand(source, bukkitCommand, label, args.tail)
+        } else {
+          source.sendMessage(ChatColor.RED + "You don't have permission to use that command")
+          false
+        }
+      } else {
+        val extra = BukkitExtra(bukkitCommand, label)
+        val res = for {
+          sender <- command.userValidator.validate(source)
+          param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
+          result <- command.run(sender, extra, param._2)
+        } yield result
 
-      val res = for {
-        sender <- command.userValidator.validate(source)
-        param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
-        result <- command.run(sender, extra, param._2)
-      } yield result
-
-      res match {
-        case Right(CommandSuccess(result)) => result
-        case Left(CommandError(msg)) =>
-          source.sendMessage(ChatColor.RED + msg)
-          true
-        case Left(CommandSyntaxError(msg, _)) =>
-          //TODO: Show error location
-          source.sendMessage(ChatColor.RED + msg)
-          true
-        case Left(CommandUsageError(msg, _)) =>
-          //TODO: Show error location
-          source.sendMessage(ChatColor.RED + msg)
-          true
-        case Left(e: MultipleCommandErrors) =>
-          source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
-          true
+        res match {
+          case Right(CommandSuccess(result)) => result
+          case Left(CommandError(msg)) =>
+            source.sendMessage(ChatColor.RED + msg)
+            true
+          case Left(CommandSyntaxError(msg, _)) =>
+            //TODO: Show error location
+            source.sendMessage(ChatColor.RED + msg)
+            true
+          case Left(CommandUsageError(msg, _)) =>
+            //TODO: Show error location
+            source.sendMessage(ChatColor.RED + msg)
+            true
+          case Left(e: MultipleCommandErrors) =>
+            source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
+            true
+        }
       }
     }
 
@@ -269,14 +293,28 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         bukkitCommand: BukkitCommand,
         alias: String,
         args: Array[String]
-    ): util.List[String] =
-      command
-        .suggestions(
-          sender,
-          BukkitExtra(bukkitCommand, alias),
-          ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
-        )
-        .asJava
+    ): util.List[String] = {
+      if (args.nonEmpty && command.children.contains(args.head)) {
+        val childCommand = command.children(args.head)
+        if (childCommand.permission.isEmpty || sender.hasPermission(childCommand.permission)) {
+          childCommand.command.onTabComplete(sender, bukkitCommand, alias, args.tail)
+        } else {
+          Nil.asJava
+        }
+      } else {
+        val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
+        val extra      = BukkitExtra(bukkitCommand, alias)
+
+        val ret = if (command.children.nonEmpty) {
+          val (ys, suggestions) = ScammanderHelper.suggestions(parsedArgs, command.children.keys)
+          if (suggestions.nonEmpty) suggestions else command.suggestions(sender, extra, ys)
+        } else {
+          command.suggestions(sender, extra, parsedArgs)
+        }
+
+        ret.asJava
+      }
+    }
 
     def register(plugin: JavaPlugin, name: String): Unit = {
       val cmd = plugin.getCommand(name)

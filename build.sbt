@@ -39,11 +39,13 @@ lazy val publishSettings = Seq(
 
 lazy val noPublishSettings = Seq(publish := {}, publishLocal := {}, publishArtifact := false)
 
+lazy val scammanderVersion = "0.2-SNAPSHOT"
+
 lazy val common = project.settings(
   commonSettings,
   publishSettings,
   name := "scammander",
-  version := "0.1",
+  version := scammanderVersion,
   libraryDependencies += "com.chuusai"   %% "shapeless" % "2.3.3",
   libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % Test
 )
@@ -53,7 +55,7 @@ lazy val sponge7 = project
     commonSettings,
     publishSettings,
     name := "scammander-sponge7",
-    version := "0.1",
+    version := scammanderVersion,
     resolvers += "Sponge" at "http://repo.spongepowered.org/maven",
     libraryDependencies += "org.spongepowered" % "spongeapi" % "7.0.0"
   )
@@ -64,7 +66,7 @@ lazy val bukkit = project
     commonSettings,
     publishSettings,
     name := "scammander-bukkit",
-    version := "0.1",
+    version := scammanderVersion,
     resolvers += "Spigot" at "https://hub.spigotmc.org/nexus/content/repositories/snapshots",
     resolvers += "BungeeCord" at "https://oss.sonatype.org/content/repositories/snapshots",
     libraryDependencies += "org.spigotmc" % "spigot-api" % "1.12-R0.1-SNAPSHOT"

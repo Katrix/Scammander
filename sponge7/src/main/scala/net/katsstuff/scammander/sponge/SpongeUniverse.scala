@@ -53,7 +53,10 @@ import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless._
 
-trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World], Int] {
+trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
+
+  override protected type Result             = Int
+  override protected type StaticChildCommand = SpongeCommandWrapper[_, _]
 
   override protected val defaultCommandSuccess: Int = 1
 
@@ -548,27 +551,38 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       extends CommandCallable {
 
     override def process(source: CommandSource, arguments: String): CommandResult = {
-      val res = for {
-        sender <- command.userValidator.validate(source)
-        param  <- command.par.parse(source, (), ScammanderHelper.stringToRawArgsQuoted(arguments))
-        result <- command.run(sender, (), param._2)
-      } yield result
+      val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
 
-      res match {
-        case Right(CommandSuccess(count)) => CommandResult.successCount(count)
-        case Left(CommandError(msg))      => throw new CommandException(Text.of(msg))
-        case Left(CommandSyntaxError(msg, pos)) =>
-          val e =
-            if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
-            else new CommandException(Text.of(msg))
-          throw e
-        case Left(CommandUsageError(msg, pos)) =>
-          //TODO: Custom exception
-          val e =
-            if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
-            else new CommandException(Text.of(msg))
-          throw e
-        case Left(e: MultipleCommandErrors) => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
+      if (args.nonEmpty && command.children.contains(args.head.content)) {
+        val childCommand = command.children(args.head.content)
+        if (childCommand.testPermission(source)) {
+          childCommand.process(source, args.tail.mkString(" "))
+        } else {
+          throw new CommandPermissionException
+        }
+      } else {
+        val res = for {
+          sender <- command.userValidator.validate(source)
+          param  <- command.par.parse(source, (), args)
+          result <- command.run(sender, (), param._2)
+        } yield result
+
+        res match {
+          case Right(CommandSuccess(count)) => CommandResult.successCount(count)
+          case Left(CommandError(msg))      => throw new CommandException(Text.of(msg))
+          case Left(CommandSyntaxError(msg, pos)) =>
+            val e =
+              if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
+              else new CommandException(Text.of(msg))
+            throw e
+          case Left(CommandUsageError(msg, pos)) =>
+            //TODO: Custom exception
+            val e =
+              if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
+              else new CommandException(Text.of(msg))
+            throw e
+          case Left(e: MultipleCommandErrors) => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
+        }
       }
     }
 
@@ -576,8 +590,29 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         arguments: String,
         targetPosition: Location[World]
-    ): util.List[String] =
-      command.suggestions(source, targetPosition, ScammanderHelper.stringToRawArgsQuoted(arguments)).asJava
+    ): util.List[String] = {
+      val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
+
+      if (args.nonEmpty && command.children.contains(args.head.content)) {
+        val childCommand = command.children(args.head.content)
+        if (childCommand.testPermission(source)) {
+          childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
+        } else {
+          Nil.asJava
+        }
+      } else {
+        val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
+
+        val ret = if (command.children.nonEmpty) {
+          val (ys, suggestions) = ScammanderHelper.suggestions(parsedArgs, command.children.keys)
+          if (suggestions.nonEmpty) suggestions else command.suggestions(source, targetPosition, ys)
+        } else {
+          command.suggestions(source, targetPosition, parsedArgs)
+        }
+
+        ret.asJava
+      }
+    }
 
     override def testPermission(source: CommandSource): Boolean = info.permission.forall(source.hasPermission)
 
@@ -591,7 +626,23 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       case None       => Optional.empty()
     }
 
-    override def getUsage(source: CommandSource): Text = Text.of(command.usage(source))
+    override def getUsage(source: CommandSource): Text = {
+      if(command.children.nonEmpty) {
+        val childUsages = command.children.groupBy(_._2.command).map {
+          case (_, aliases) =>
+            val aliasPart = aliases.keys.mkString("|")
+            val usagePart = aliases.head._2.getUsage(source)
+            s"$aliasPart $usagePart"
+        }
+
+        val childUsage = childUsages.mkString("|")
+        val usage = s"$childUsage|${command.usage(source)}"
+        Text.of(usage)
+      }
+      else {
+        Text.of(command.usage(source))
+      }
+    }
 
     def register(plugin: AnyRef, aliases: Seq[String]): Option[CommandMapping] = {
       val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)

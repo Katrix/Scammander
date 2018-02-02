@@ -33,9 +33,12 @@ import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 import shapeless._
 import shapeless.labelled.FieldType
 
-trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
-    extends NormalParametersInstances[RootSender, RunExtra, TabExtra, Result]
-    with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result] {
+trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
+    extends NormalParametersInstances[RootSender, RunExtra, TabExtra]
+    with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra] {
+
+  protected type Result
+  protected type StaticChildCommand
 
   protected val defaultCommandSuccess: Result
 
@@ -97,6 +100,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
       par.suggestions(source, extra, strArgs)._2
 
     def usage(source: RootSender): String = par.usage(source)
+
+    def children: Map[String, StaticChildCommand] = Map.empty
   }
   object Command {
 
@@ -120,6 +125,32 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
       new Command[Sender, Param] {
         override def run(source: Sender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
           runCmd(source, extra, arg)
+      }
+
+    /**
+      * Create a simple command with children from a function that takes a
+      * parameter of the given type.
+      */
+    def simpleWithChildren[Param](childMap: Map[String, StaticChildCommand])(
+        runCmd: (RootSender, RunExtra, Param) => CommandStep[CommandSuccess]
+    )(implicit parameter: Parameter[Param]): Command[RootSender, Param] = new Command[RootSender, Param] {
+      override def run(source: RootSender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
+        runCmd(source, extra, arg)
+
+      override def children: Map[String, StaticChildCommand] = childMap
+    }
+
+    /**
+      * Create a command with children from a function that takes a parameter and sender of the given types.
+      */
+    def withSenderAndChildren[Sender, Param](childMap: Map[String, StaticChildCommand])(
+        runCmd: (Sender, RunExtra, Param) => CommandStep[CommandSuccess]
+    )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
+      new Command[Sender, Param] {
+        override def run(source: Sender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
+          runCmd(source, extra, arg)
+
+        override def children: Map[String, StaticChildCommand] = childMap
       }
 
     /**
@@ -314,7 +345,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
     ): CommandStep[(List[RawCmdArg], List[RawCmdArg])] = Right((Nil, xs))
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
-      (Nil, Nil)
+      (xs, Nil)
   }
 
   //Helper parameters and modifiers
@@ -615,8 +646,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra, Result]
   }
 }
 
-trait NormalParametersInstances[RootSender, RunExtra, TabExtra, Result] {
-  self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
+trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
+  self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
   def primitiveParam[A](parName: String, s: String => A): Parameter[A] =
     new Parameter[A] {
       override def name: String = parName
@@ -767,9 +798,9 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra, Result] {
   }
 }
 
-trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result]
-    extends ParameterDeriver[RootSender, RunExtra, TabExtra, Result] {
-  self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
+trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
+    extends ParameterDeriver[RootSender, RunExtra, TabExtra] {
+  self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
 
   implicit def genParam[A, Gen](
       implicit gen: LabelledGeneric.Aux[A, Gen],
@@ -862,8 +893,8 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra, Result]
     }
 }
 
-trait ParameterDeriver[RootSender, RunExtra, TabExtra, Result] {
-  self: ScammanderUniverse[RootSender, RunExtra, TabExtra, Result] =>
+trait ParameterDeriver[RootSender, RunExtra, TabExtra] {
+  self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
   implicit def hConsParam[H, T <: HList](
       implicit hParam: Lazy[Parameter[H]],
       tParam: Lazy[Parameter[T]]
