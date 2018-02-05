@@ -25,7 +25,7 @@ import java.time.format.DateTimeParseException
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util.{Locale, UUID}
 
-import scala.annotation.tailrec
+import scala.annotation.{implicitNotFound, tailrec}
 import scala.util.Try
 
 import net.katsstuff.scammander
@@ -198,6 +198,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     * A parameter for a command. Can convert a list of arguments into a given type.
     * @tparam A The parsed value.
     */
+  @implicitNotFound("Could not find a parameter for ${A}. Have you tried using OnlyOne")
   trait Parameter[A] {
 
     /**
@@ -392,18 +393,18 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     * If there is not a single A, the parameter fails.
     */
   case class OnlyOne[A](value: A)
-  implicit def onlyOneParam[A](implicit setParam: Parameter[Set[A]]): Parameter[A] =
-    new ProxyParameter[A, Set[A]] {
+  implicit def onlyOneParam[A](implicit setParam: Parameter[Set[A]]): Parameter[OnlyOne[A]] =
+    new ProxyParameter[OnlyOne[A], Set[A]] {
       override def param: Parameter[Set[A]] = setParam
 
       override def parse(
           source: RootSender,
           extra: RunExtra,
           xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], A)] = {
+      ): CommandStep[(List[RawCmdArg], OnlyOne[A])] = {
         val pos = xs.headOption.map(_.start).getOrElse(-1)
         param.parse(source, extra, xs).flatMap {
-          case (rest, seq) if seq.size == 1 => Right((rest, seq.head))
+          case (rest, seq) if seq.size == 1 => Right((rest, OnlyOne(seq.head)))
           case (_, seq) if seq.isEmpty      => Left(CommandUsageError("No values found", pos))
           case _                            => Left(CommandUsageError("More than one possible value", pos))
         }
