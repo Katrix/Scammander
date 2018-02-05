@@ -348,6 +348,26 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       (xs, Nil)
   }
 
+  trait NotUsed
+  object NotUsed extends NotUsed
+  implicit val notUsedParam: Parameter[NotUsed] = new Parameter[NotUsed] {
+
+    override def name: String = ""
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], NotUsed)] =
+      if (xs.nonEmpty) Command.errorStep("Too many arguments for command")
+      else Right(Nil -> NotUsed)
+
+    override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
+      (Nil, Nil)
+
+    override def usage(source: RootSender): String = ""
+  }
+
   //Helper parameters and modifiers
 
   /**
