@@ -161,17 +161,17 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     /**
       * Creates a generic command error step.
       */
-    def errorStep(msg: String): CommandStep[CommandSuccess] = Left(CommandError(msg))
+    def errorStep[A](msg: String): CommandStep[A] = Left(CommandError(msg))
 
     /**
       * Creates a syntax command error step.
       */
-    def syntaxErrorStep(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandSyntaxError(msg, pos))
+    def syntaxErrorStep[A](msg: String, pos: Int): CommandStep[A] = Left(CommandSyntaxError(msg, pos))
 
     /**
       * Creates a usage  command error step.
       */
-    def usageErrorStep(msg: String, pos: Int): CommandStep[CommandSuccess] = Left(CommandUsageError(msg, pos))
+    def usageErrorStep[A](msg: String, pos: Int): CommandStep[A] = Left(CommandUsageError(msg, pos))
 
     /**
       * Creates a command success.
