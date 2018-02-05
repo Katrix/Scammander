@@ -275,6 +275,23 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     }
   }
 
+  case class Named[Name <: String, A](value: A)
+  implicit def namedParam[Name <: String, A](
+      implicit paramParam: Parameter[A],
+      witness: Witness.Aux[Name]
+  ): Parameter[Named[Name, A]] = new ProxyParameter[Named[Name, A], A] {
+    override def name: String = witness.value
+
+    override def param: Parameter[A] = paramParam
+
+    override def parse(
+        source: RootSender,
+        extra: RunExtra,
+        xs: List[RawCmdArg]
+    ): CommandStep[(List[RawCmdArg], Named[Name, A])] =
+      paramParam.parse(source, extra, xs).map(t => t._1 -> Named(t._2))
+  }
+
   /**
     * Represents a named command. If one of these are in the implicit scope,
     * you can use a [[DynamicCommand]] in you command.
