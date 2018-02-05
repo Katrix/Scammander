@@ -274,6 +274,13 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           xs: List[RawCmdArg]
       ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, choices)
     }
+
+    def deriver[A]: Deriver[A] = new Deriver[A]
+  }
+
+  class Deriver[A] {
+    def derive[Repr](implicit gen: LabelledGeneric.Aux[A, Repr], param: Parameter[Repr]): Parameter[A] =
+      genParam[A, gen.Repr]
   }
 
   case class Named[Name <: String, A](value: A)
@@ -840,10 +847,7 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
     extends ParameterDeriver[RootSender, RunExtra, TabExtra] {
   self: ScammanderUniverse[RootSender, RunExtra, TabExtra] =>
 
-  implicit def genParam[A, Gen](
-      implicit gen: LabelledGeneric.Aux[A, Gen],
-      genParam: Lazy[Parameter[Gen]]
-  ): Parameter[A] =
+  def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Lazy[Parameter[Gen]]): Parameter[A] =
     new ProxyParameter[A, Gen] {
       override def param: Parameter[Gen] = genParam.value
 
