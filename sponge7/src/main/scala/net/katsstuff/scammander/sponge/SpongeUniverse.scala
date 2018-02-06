@@ -128,7 +128,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
           extra: Location[World],
           xs: List[RawCmdArg]
       ): (List[RawCmdArg], Seq[String]) =
-        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
+        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.drop(1), Nil)
     }
 
   implicit val allPlayerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
@@ -164,12 +164,14 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         extra: Location[World],
         xs: List[RawCmdArg]
     ): (List[RawCmdArg], Seq[String]) = {
-      val head = xs.head
-      val choices =
-        if (head.content.startsWith("@")) Selector.complete(head.content).asScala
-        else Sponge.getServer.getOnlinePlayers.asScala.map(_.getName)
+      if (xs.nonEmpty) {
+        val head = xs.head
+        val choices =
+          if (head.content.startsWith("@")) Selector.complete(head.content).asScala
+          else Sponge.getServer.getOnlinePlayers.asScala.map(_.getName)
 
-      ScammanderHelper.suggestions(xs, choices)
+        ScammanderHelper.suggestions(xs, choices)
+      } else ScammanderHelper.suggestions(xs, Sponge.getServer.getOnlinePlayers.asScala)
     }
   }
 
@@ -204,7 +206,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, Selector.complete(xs.head.content).asScala)
+    ): (List[RawCmdArg], Seq[String]) =
+      if (xs.nonEmpty) {
+        ScammanderHelper.suggestions(xs, Selector.complete(xs.head.content).asScala)
+      } else Nil -> Nil
   }
 
   implicit val userParam: Parameter[Set[User]] = new Parameter[Set[User]] {
@@ -384,7 +389,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+    ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
   }
 
   implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
@@ -411,7 +416,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+    ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
   }
 
   //TODO: text
@@ -601,14 +606,13 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
           Nil.asJava
         }
       } else {
-        val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
-
-        val ret = if (command.children.nonEmpty) {
-          val (ys, suggestions) = ScammanderHelper.suggestions(parsedArgs, command.children.keys)
-          if (suggestions.nonEmpty) suggestions else command.suggestions(source, targetPosition, ys)
-        } else {
-          command.suggestions(source, targetPosition, parsedArgs)
-        }
+        val childSuggestions = ScammanderHelper.suggestions(args, command.children.keys)._2
+        val ret =
+          if (args.nonEmpty && childSuggestions.nonEmpty) childSuggestions
+          else {
+            val paramSuggestions = command.suggestions(source, targetPosition, args)
+            childSuggestions ++ paramSuggestions
+          }
 
         ret.asJava
       }
@@ -627,7 +631,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     }
 
     override def getUsage(source: CommandSource): Text = {
-      if(command.children.nonEmpty) {
+      if (command.children.nonEmpty) {
         val childUsages = command.children.groupBy(_._2.command).map {
           case (_, aliases) =>
             val aliasPart = aliases.keys.mkString("|")
@@ -636,10 +640,9 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         }
 
         val childUsage = childUsages.mkString("|")
-        val usage = s"$childUsage|${command.usage(source)}"
+        val usage      = s"$childUsage|${command.usage(source)}"
         Text.of(usage)
-      }
-      else {
+      } else {
         Text.of(command.usage(source))
       }
     }

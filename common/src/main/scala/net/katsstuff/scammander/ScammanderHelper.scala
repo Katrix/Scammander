@@ -27,7 +27,7 @@ import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
 
 object ScammanderHelper {
 
-  private val spaceRegex  = """\S+""".r
+  private val spaceRegex = """\S+""".r
   //https://stackoverflow.com/questions/249791/regex-for-quoted-string-with-escaping-quotes
   private val quotedRegex = """(?:"((?:[^"\\]|\\.)+)")|((?:\S)+)""".r
 
@@ -59,10 +59,14 @@ object ScammanderHelper {
     * all the possible string suggestions.
     */
   def suggestions(xs: List[RawCmdArg], choices: => Iterable[String]): (List[RawCmdArg], Seq[String]) = {
-    val head = xs.head
-    val tail = xs.tail
+    if (xs.nonEmpty) {
+      val head = xs.head
+      val tail = xs.tail
 
-    if (tail.isEmpty) (Nil, choices.filter(head.content.startsWith).toSeq) else (tail, Nil)
+      if (tail.isEmpty) (Nil, choices.filter(_.startsWith(head.content)).toSeq) else (tail, Nil)
+    } else {
+      Nil -> choices.toSeq
+    }
   }
 
   /**

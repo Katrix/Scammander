@@ -47,14 +47,14 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
   override protected type Result             = Boolean
   override protected type StaticChildCommand = ChildCommand
 
-  case class ChildCommand(
-      command: BukkitCommandWrapper[_, _],
-      permission: String,
-      help: String,
-      description: String
-  )
+  case class ChildCommand(command: BukkitCommandWrapper[_, _], permission: String, help: String, description: String)
 
   override protected val defaultCommandSuccess: Boolean = true
+
+  implicit val playerHasName:        HasName[Player]        = (a: Player) => a.getName
+  implicit val offlinePlayerHasName: HasName[OfflinePlayer] = (a: OfflinePlayer) => a.getName
+  implicit val worldHasName:         HasName[World]         = (a: World) => a.getName
+  implicit val pluginHasName:        HasName[Plugin]        = (a: Plugin) => a.getName
 
   /**
     * A class to use for parameter that should require a specific permission.
@@ -89,7 +89,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
           extra: BukkitExtra,
           xs: List[RawCmdArg]
       ): (List[RawCmdArg], Seq[String]) =
-        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.tail, Nil)
+        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.drop(1), Nil)
     }
 
   //TODO: Selector with NMS
@@ -115,10 +115,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Set[OfflinePlayer])] = {
       val players = allPlayerParam.parse(source, extra, xs)
-      val users = {
-        val users = Bukkit.getOfflinePlayers
-        ScammanderHelper.parseMany(name, xs, users)
-      }
+      val users   = ScammanderHelper.parseMany(name, xs, Bukkit.getOfflinePlayers)
 
       for {
         e1 <- players.map(t => t._1 -> t._2.map(player => player: OfflinePlayer)).left
@@ -194,19 +191,11 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toBukkit: BukkitCommandWrapper[Sender, Param] = BukkitCommandWrapper(command)
-    def toBukkitChild(
-        permission: String = "",
-        help: String = "",
-        description: String = ""
-    ): ChildCommand = ChildCommand(command.toBukkit, permission, help, description)
+    def toBukkitChild(permission: String = "", help: String = "", description: String = ""): ChildCommand =
+      ChildCommand(command.toBukkit, permission, help, description)
 
     def register(plugin: JavaPlugin, name: String): Unit = toBukkit.register(plugin, name)
   }
-
-  implicit val playerHasName:        HasName[Player]        = (a: Player) => a.getName
-  implicit val offlinePlayerHasName: HasName[OfflinePlayer] = (a: OfflinePlayer) => a.getName
-  implicit val worldHasName:         HasName[World]         = (a: World) => a.getName
-  implicit val pluginHasName:        HasName[Plugin]        = (a: Plugin) => a.getName
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player => Right(player)
@@ -305,12 +294,13 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
         val extra      = BukkitExtra(bukkitCommand, alias)
 
-        val ret = if (command.children.nonEmpty) {
-          val (ys, suggestions) = ScammanderHelper.suggestions(parsedArgs, command.children.keys)
-          if (suggestions.nonEmpty) suggestions else command.suggestions(sender, extra, ys)
-        } else {
-          command.suggestions(sender, extra, parsedArgs)
-        }
+        val childSuggestions = ScammanderHelper.suggestions(parsedArgs, command.children.keys)._2
+        val ret =
+          if (parsedArgs.nonEmpty && childSuggestions.nonEmpty) childSuggestions
+          else {
+            val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
+            childSuggestions ++ paramSuggestions
+          }
 
         ret.asJava
       }

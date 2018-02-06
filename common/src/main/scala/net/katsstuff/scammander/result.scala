@@ -27,7 +27,7 @@ sealed trait CommandFailure {
   def msg: String
   def merge(failure: CommandFailure): CommandFailure = failure match {
     case multiple: MultipleCommandErrors => multiple.merge(this)
-    case other => MultipleCommandErrors(Seq(this, failure))
+    case other                           => MultipleCommandErrors(Seq(this, failure))
   }
 }
 
@@ -53,5 +53,5 @@ case class MultipleCommandErrors(failures: Seq[CommandFailure]) extends CommandF
   override def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(failures :+ failure)
 
   //We don't want to show too many errors
-  override def msg: String = failures.take(5).map(_.msg).mkString("\n")
+  override def msg: String = failures.take(5).zipWithIndex.map(t => s"Err${t._2}: ${t._1.msg}").mkString("\n")
 }

@@ -760,7 +760,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
           source: RootSender,
           extra: TabExtra,
           xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) = (xs.tail, Nil)
+      ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
     }
 
   def mkSingle[A](
@@ -816,7 +816,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
     }
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
-      (xs.tail, Nil)
+      (xs.drop(1), Nil)
   }
 
   implicit val bigDecimalParam: Parameter[BigDecimal] = primitiveParam("bigDecimal", BigDecimal.apply)
@@ -858,7 +858,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       val date = LocalDateTime.now.withNano(0).toString
       val arg  = xs.headOption.map(_.content).getOrElse("")
 
-      xs.tail -> (if (date.startsWith(arg)) Seq(date) else Nil)
+      xs.drop(1) -> (if (date.startsWith(arg)) Seq(date) else Nil)
     }
   }
 
@@ -889,7 +889,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
     }
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
-      (xs.tail, Nil)
+      (xs.drop(1), Nil)
   }
 }
 
