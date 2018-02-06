@@ -25,7 +25,10 @@ package net.katsstuff.scammander
   */
 sealed trait CommandFailure {
   def msg: String
-  def merge(failure: CommandFailure): CommandFailure = MultipleCommandErrors(Seq(this, failure))
+  def merge(failure: CommandFailure): CommandFailure = failure match {
+    case multiple: MultipleCommandErrors => multiple.merge(this)
+    case other => MultipleCommandErrors(Seq(this, failure))
+  }
 }
 
 /**
