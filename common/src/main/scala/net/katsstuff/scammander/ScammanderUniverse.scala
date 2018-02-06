@@ -276,6 +276,49 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     }
 
     def deriver[A]: Deriver[A] = new Deriver[A]
+
+    def mkSingleton[A](obj: A)(implicit typeable: Typeable[A]): Parameter[A] = {
+      val name =
+        if (typeable.describe.endsWith(".type")) typeable.describe.dropRight(5).toLowerCase(Locale.ROOT)
+        else typeable.describe.toLowerCase(Locale.ROOT)
+      mkSingleton(obj, name, Seq(name))
+    }
+
+    def mkSingleton[A](obj: A, choiceName: String, names: Seq[String]): Parameter[A] = new Parameter[A] {
+
+      override val name: String =
+        names.mkString("|")
+
+      override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
+        ScammanderHelper.parse(choiceName, xs, names.map(_ -> obj).toMap)
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, names)
+
+      override def usage(source: RootSender): String = name
+    }
+
+    def choice[A](choiceName: String, choices: Map[String, A]): Parameter[Set[A]] = new Parameter[Set[A]] {
+
+      override def name: String = choices.keys.mkString("|")
+
+      override def parse(
+          source: RootSender,
+          extra: RunExtra,
+          xs: List[RawCmdArg]
+      ): CommandStep[(List[RawCmdArg], Set[A])] = ScammanderHelper.parseMany(choiceName, xs, choices)
+
+      override def suggestions(
+          source: RootSender,
+          extra: TabExtra,
+          xs: List[RawCmdArg]
+      ): (List[RawCmdArg], Seq[String]) = ScammanderHelper.suggestions(xs, choices.keys)
+
+      override def usage(source: RootSender): String = name
+    }
   }
 
   class Deriver[A] {
@@ -320,7 +363,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   def dynamicCommandOf[Args, Identifier, Sender, Param](
       command: Args => Command[Sender, Param],
       identifier: Identifier
-  ) = new GetDynamicCommandType[Args, Identifier, Sender, Param]
+  ): GetDynamicCommandType[Args, Identifier, Sender, Param] = new GetDynamicCommandType[Args, Identifier, Sender, Param]
 
   class GetDynamicCommandType[Args, Identifier, Sender, Param] {
     type T = DynamicCommand[Args, Identifier, Sender, Param]
