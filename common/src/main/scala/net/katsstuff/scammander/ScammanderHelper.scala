@@ -59,14 +59,21 @@ object ScammanderHelper {
     * all the possible string suggestions.
     */
   def suggestions(xs: List[RawCmdArg], choices: => Iterable[String]): (List[RawCmdArg], Seq[String]) = {
-    if (xs.nonEmpty) {
+    val res = if (xs.nonEmpty) {
       val head = xs.head
       val tail = xs.tail
 
-      if (tail.isEmpty) (Nil, choices.filter(_.startsWith(head.content)).toSeq) else (tail, Nil)
+      if (tail.isEmpty) {
+        val startsWith = choices.filter(_.startsWith(head.content)).toSeq
+        if (startsWith.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(head.content))) {
+          (Nil, Nil)
+        } else (Nil, startsWith)
+      } else (tail, Nil)
     } else {
       Nil -> choices.toSeq
     }
+
+    res
   }
 
   /**
