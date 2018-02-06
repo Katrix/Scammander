@@ -559,6 +559,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           extra: RunExtra,
           xs: List[RawCmdArg]
       ): CommandStep[(List[RawCmdArg], ValueFlag[Name, A])] = {
+
+        @tailrec
         def inner(ys: List[RawCmdArg], acc: List[RawCmdArg]): CommandStep[(List[RawCmdArg], ValueFlag[Name, A])] = {
           if (ys.nonEmpty) {
             val h = ys.head
@@ -575,10 +577,25 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           source: RootSender,
           extra: TabExtra,
           xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) =
-        if (xs.lengthCompare(2) == 0) {
-          flagParam.suggestions(source, extra, xs.drop(1))
-        } else (xs.drop(2), Nil)
+      ): (List[RawCmdArg], Seq[String]) = {
+
+        @tailrec
+        def inner(xs: List[RawCmdArg], acc: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+          if(xs.isEmpty) (acc.reverse, Nil)
+          else {
+            val (ys, suggestions1) = ScammanderHelper.suggestions(xs, Seq(flagName))
+            if (suggestions1.nonEmpty) {
+              (acc reverse_::: ys, suggestions1)
+            } else if(xs.headOption.map(_.content).contains(flagName)) {
+              flagParam.suggestions(source, extra, ys)
+            } else inner(xs.tail, xs.head :: acc)
+          }
+        }
+
+        inner(xs, Nil)
+      }
+
+      override def usage(source: RootSender): String = s"$flagName ${flagParam.usage(source)}"
     }
 
   /**
@@ -597,6 +614,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           extra: RunExtra,
           xs: List[RawCmdArg]
       ): CommandStep[(List[RawCmdArg], BooleanFlag[Name])] = {
+
+        @tailrec
         def inner(ys: List[RawCmdArg], acc: List[RawCmdArg]): CommandStep[(List[RawCmdArg], BooleanFlag[Name])] = {
           if (ys.nonEmpty) {
             val h = ys.head
@@ -613,7 +632,21 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
           source: RootSender,
           extra: TabExtra,
           xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
+      ): (List[RawCmdArg], Seq[String]) = {
+
+        @tailrec
+        def inner(xs: List[RawCmdArg], acc: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) = {
+          if(xs.isEmpty) (acc.reverse, Nil)
+          else {
+            val (ys, suggestions1) = ScammanderHelper.suggestions(xs, Seq(flagName))
+            if (suggestions1.nonEmpty) {
+              (acc reverse_::: ys, suggestions1)
+            } else inner(xs.tail, xs.head :: acc)
+          }
+        }
+
+        inner(xs, Nil)
+      }
     }
 
   /**
