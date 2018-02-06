@@ -1028,7 +1028,7 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] {
     override def name: String = ""
 
     override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], CNil)] =
-      sys.error("CNil")
+      Command.syntaxErrorStep("Could not parse argument", xs.headOption.map(_.start).getOrElse(-1))
 
     override def suggestions(source: RootSender, extra: TabExtra, xs: List[RawCmdArg]): (List[RawCmdArg], Seq[String]) =
       (xs, Nil)
