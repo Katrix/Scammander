@@ -81,6 +81,7 @@ object ScammanderHelper {
       xs: List[RawCmdArg],
       choices: Map[String, A]
   ): Either[CommandFailure, (List[RawCmdArg], A)] = {
+    assert(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
     if (xs.nonEmpty) {
       val head = xs.head
       choices
