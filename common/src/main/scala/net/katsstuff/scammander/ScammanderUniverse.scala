@@ -321,6 +321,13 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
     }
   }
 
+  object autoderivation {
+    implicit def autoGenParam[A, Gen](
+        implicit gen: LabelledGeneric.Aux[A, Gen],
+        param: Lazy[Parameter[Gen]]
+    ): Parameter[A] = genParam[A, Gen]
+  }
+
   class Deriver[A] {
     def derive[Repr](implicit gen: LabelledGeneric.Aux[A, Repr], param: Parameter[Repr]): Parameter[A] =
       genParam[A, gen.Repr]
