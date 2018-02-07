@@ -51,6 +51,8 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
   override protected val defaultCommandSuccess: Boolean = true
 
+  override protected def tabExtraToRunExtra(extra: BukkitExtra): BukkitExtra = extra
+
   implicit val playerHasName:        HasName[Player]        = (a: Player) => a.getName
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = (a: OfflinePlayer) => a.getName
   implicit val worldHasName:         HasName[World]         = (a: World) => a.getName
@@ -88,8 +90,8 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
           source: CommandSender,
           extra: BukkitExtra,
           xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) =
-        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.drop(1), Nil)
+      ): Either[List[RawCmdArg], Seq[String]] =
+        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else Left(xs.drop(1))
     }
 
   //TODO: Selector with NMS
@@ -127,8 +129,8 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         source: CommandSender,
         extra: BukkitExtra,
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
-      ScammanderHelper.suggestions(xs, Bukkit.getOfflinePlayers)
+    ): Either[List[RawCmdArg], Seq[String]] =
+      ScammanderHelper.suggestionsNamed(parse(source, extra, _), xs, Bukkit.getOfflinePlayers)
   }
 
   implicit val worldParam: Parameter[Set[World]] = Parameter.mkNamed("world", Bukkit.getWorlds.asScala)
@@ -158,7 +160,7 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         source: CommandSender,
         extra: BukkitExtra,
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.drop(3), Nil)
+    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(3))
 
     private def parseRelativeDouble(
         source: CommandSender,
@@ -294,12 +296,16 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
         val extra      = BukkitExtra(bukkitCommand, alias)
 
-        val childSuggestions = ScammanderHelper.suggestions(parsedArgs, command.children.keys)._2
+        val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
+          val isParsed = xs.headOption.exists(arg => command.children.keys.exists(_.equalsIgnoreCase(arg.content)))
+          Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
+        }
+        val childSuggestions = ScammanderHelper.suggestions(parse, parsedArgs, command.children.keys)
         val ret =
-          if (parsedArgs.nonEmpty && childSuggestions.nonEmpty) childSuggestions
+          if (parsedArgs.nonEmpty && childSuggestions.isRight) childSuggestions.getOrElse(Nil)
           else {
             val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
-            childSuggestions ++ paramSuggestions
+            childSuggestions.getOrElse(Nil) ++ paramSuggestions
           }
 
         ret.asJava

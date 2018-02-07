@@ -33,6 +33,8 @@ object ScammanderHelper {
 
   val notEnoughArgs = CommandSyntaxError("Not enough arguments", -1)
 
+  type CommandStep[A] = Either[CommandFailure, A]
+
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace.
     */
@@ -58,31 +60,29 @@ object ScammanderHelper {
     * Returns the suggestions for a command given the argument list and
     * all the possible string suggestions.
     */
-  def suggestions(xs: List[RawCmdArg], choices: => Iterable[String]): (List[RawCmdArg], Seq[String]) = {
-    val res = if (xs.nonEmpty) {
-      val head = xs.head
-      val tail = xs.tail
-
-      if (tail.isEmpty) {
-        val startsWith = choices.filter(_.startsWith(head.content)).toSeq
-        if (startsWith.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(head.content))) {
-          (Nil, Nil)
-        } else (Nil, startsWith)
-      } else (tail, Nil)
-    } else {
-      Nil -> choices.toSeq
-    }
-
-    res
+  def suggestions(
+      parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], _)],
+      xs: List[RawCmdArg],
+      choices: => Iterable[String]
+  ): Either[List[RawCmdArg], Seq[String]] = {
+    parse(xs)
+      .fold(_ => {
+        val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
+        if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
+          Left(xs.drop(1))
+        else Right(startsWith.getOrElse(choices.toSeq))
+      }, t => Left(t._1))
   }
 
   /**
     * Returns the suggestions for a command given the argument list and
     * all the possible suggestions.
     */
-  def suggestions[A](xs: List[RawCmdArg], choices: => Iterable[A])(
-      implicit named: HasName[A]
-  ): (List[RawCmdArg], Seq[String]) = suggestions(xs, choices.map(named.apply))
+  def suggestionsNamed[A](
+      parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], _)],
+      xs: List[RawCmdArg],
+      choices: => Iterable[A]
+  )(implicit named: HasName[A]): Either[List[RawCmdArg], Seq[String]] = suggestions(parse, xs, choices.map(named.apply))
 
   /**
     * Parse a single paramter given the current argument list, and a map of the valid choices.
@@ -136,7 +136,9 @@ object ScammanderHelper {
         .getOrElse {
           if (filteredChoices.nonEmpty) {
             Right(xs.tail -> filteredChoices.values.toSet)
-          } else Left(CommandUsageError(s"No values present for $unformattedPattern", pos))
+          } else {
+            Left(CommandUsageError(s"$unformattedPattern is not a valid $name", pos))
+          }
         }
     } else Left(notEnoughArgs)
   }

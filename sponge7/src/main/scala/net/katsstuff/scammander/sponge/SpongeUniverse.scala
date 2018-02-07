@@ -62,6 +62,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
   //Helpers used when registering command
 
+  override protected def tabExtraToRunExtra(extra: Location[World]): Unit = ()
+
   /**
     * Helper for creating an alias when registering a command.
     */
@@ -127,8 +129,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
           source: CommandSource,
           extra: Location[World],
           xs: List[RawCmdArg]
-      ): (List[RawCmdArg], Seq[String]) =
-        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else (xs.drop(1), Nil)
+      ): Either[List[RawCmdArg], Seq[String]] =
+        if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else Left(xs.drop(1))
     }
 
   implicit val allPlayerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
@@ -143,16 +145,21 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         val head = xs.head.content
 
         if (head.startsWith("@")) {
-          val players = Selector
-            .parse(xs.head.content)
-            .resolve(source)
-            .asScala
-            .collect {
-              case player: Player => player
-            }
-            .toSet
+          try {
+            val players = Selector
+              .parse(xs.head.content)
+              .resolve(source)
+              .asScala
+              .collect {
+                case player: Player => player
+              }
+              .toSet
 
-          Right(xs.tail -> players)
+            Right(xs.tail -> players)
+          }
+          catch {
+            case e: IllegalArgumentException => Left(Command.error(e.getMessage))
+          }
         } else {
           ScammanderHelper.parseMany(name, xs, Sponge.getServer.getOnlinePlayers.asScala)
         }
@@ -163,15 +170,15 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = {
+    ): Either[List[RawCmdArg], Seq[String]] = {
       if (xs.nonEmpty) {
         val head = xs.head
         val choices =
           if (head.content.startsWith("@")) Selector.complete(head.content).asScala
           else Sponge.getServer.getOnlinePlayers.asScala.map(_.getName)
 
-        ScammanderHelper.suggestions(xs, choices)
-      } else ScammanderHelper.suggestions(xs, Sponge.getServer.getOnlinePlayers.asScala)
+        ScammanderHelper.suggestions(parse(source, (), _), xs, choices)
+      } else ScammanderHelper.suggestionsNamed(parse(source, (), _), xs, Sponge.getServer.getOnlinePlayers.asScala)
     }
   }
 
@@ -195,10 +202,15 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Set[A])] = {
       if (xs.nonEmpty) {
-        val entities = Selector.parse(xs.head.content).resolve(source).asScala.collect {
-          case EntityType(entity) => entity
+        try {
+          val entities = Selector.parse(xs.head.content).resolve(source).asScala.collect {
+            case EntityType(entity) => entity
+          }
+          Right((xs.tail, entities.toSet))
         }
-        Right((xs.tail, entities.toSet))
+        catch {
+          case e: IllegalArgumentException => Left(Command.error(e.getMessage))
+        }
       } else Left(ScammanderHelper.notEnoughArgs)
     }
 
@@ -206,10 +218,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
+    ): Either[List[RawCmdArg], Seq[String]] =
       if (xs.nonEmpty) {
-        ScammanderHelper.suggestions(xs, Selector.complete(xs.head.content).asScala)
-      } else Nil -> Nil
+        ScammanderHelper.suggestions(parse(source, (), _), xs, Selector.complete(xs.head.content).asScala)
+      } else Left(Nil)
   }
 
   implicit val userParam: Parameter[Set[User]] = new Parameter[Set[User]] {
@@ -245,8 +257,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) =
-      ScammanderHelper.suggestions(xs, userStorage.getAll.asScala.collect {
+    ): Either[List[RawCmdArg], Seq[String]] =
+      ScammanderHelper.suggestions(parse(source, (), _), xs, userStorage.getAll.asScala.collect {
         case profile if profile.getName.isPresent => profile.getName.get()
       })
   }
@@ -277,7 +289,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.drop(3), Nil)
+    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(3))
 
     private def parseRelativeDouble(
         source: CommandSource,
@@ -317,8 +329,13 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
       xs.headOption
         .collect {
           case RawCmdArg(_, _, arg) if arg.startsWith("@") =>
-            val entities = Selector.parse(arg).resolve(source).asScala.toSet
-            Right(xs.tail -> entities.map(_.getLocation))
+            try {
+              val entities = Selector.parse(arg).resolve(source).asScala.toSet
+              Right(xs.tail -> entities.map(_.getLocation))
+            }
+            catch {
+              case e: IllegalArgumentException => Left(Command.error(e.getMessage))
+            }
         }
         .getOrElse {
           for {
@@ -338,14 +355,19 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = {
+    ): Either[List[RawCmdArg], Seq[String]] = {
       xs.headOption
         .collect {
-          case RawCmdArg(_, _, arg) if arg.startsWith("@") => xs.tail -> Selector.complete(arg).asScala
+          case RawCmdArg(_, _, arg) if arg.startsWith("@") =>
+            try {
+              Selector.parse(arg)
+              Left(xs.tail)
+            } catch {
+              case _: IllegalArgumentException => Right(Selector.complete(arg).asScala)
+            }
         }
         .getOrElse {
-          val wt = worldParam.suggestions(source, extra, xs)
-          if (wt._2.isEmpty) vector3dParam.suggestions(source, extra, xs) else wt
+          worldParam.suggestions(source, extra, xs).left.flatMap(_ => vector3dParam.suggestions(source, extra, xs))
         }
     }
   }
@@ -389,7 +411,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
+    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(1))
   }
 
   implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
@@ -416,7 +438,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): (List[RawCmdArg], Seq[String]) = (xs.drop(1), Nil)
+    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(1))
   }
 
   //TODO: text
@@ -606,12 +628,16 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
           Nil.asJava
         }
       } else {
-        val childSuggestions = ScammanderHelper.suggestions(args, command.children.keys)._2
+        val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
+          val isParsed = xs.headOption.exists(arg => command.children.keys.exists(_.equalsIgnoreCase(arg.content)))
+          Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
+        }
+        val childSuggestions = ScammanderHelper.suggestions(parse, args, command.children.keys)
         val ret =
-          if (args.nonEmpty && childSuggestions.nonEmpty) childSuggestions
+          if (args.nonEmpty && childSuggestions.isRight) childSuggestions.getOrElse(Nil)
           else {
             val paramSuggestions = command.suggestions(source, targetPosition, args)
-            childSuggestions ++ paramSuggestions
+            childSuggestions.getOrElse(Nil) ++ paramSuggestions
           }
 
         ret.asJava
