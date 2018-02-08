@@ -43,6 +43,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   protected val defaultCommandSuccess: Result
   protected def tabExtraToRunExtra(extra: TabExtra): RunExtra
 
+  case class ChildCommand(aliases: Set[String], command: StaticChildCommand)
+
   /**
     * A successful run of a command.
     */
@@ -69,8 +71,8 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
     implicit val rootValidator: UserValidator[RootSender] = mkValidator(Right.apply)
 
-    implicit def onlyOneValidator[A](implicit validator: UserValidator[A]): UserValidator[OnlyOne[A]] = (
-      sender: RootSender) => validator.validate(sender).map(OnlyOne.apply)
+    implicit def onlyOneValidator[A](implicit validator: UserValidator[A]): UserValidator[OnlyOne[A]] =
+      (sender: RootSender) => validator.validate(sender).map(OnlyOne.apply)
   }
 
   //Results and steps
@@ -105,7 +107,10 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
     def usage(source: RootSender): String = par.usage(source)
 
-    def children: Map[String, StaticChildCommand] = Map.empty
+    def children: Set[ChildCommand] = Set.empty
+
+    lazy val childrenMap: Map[String, StaticChildCommand] =
+      children.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
   }
   object Command {
 
@@ -135,26 +140,26 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       * Create a simple command with children from a function that takes a
       * parameter of the given type.
       */
-    def simpleWithChildren[Param](childMap: Map[String, StaticChildCommand])(
+    def withChildren[Param](childSet: Set[ChildCommand])(
         runCmd: (RootSender, RunExtra, Param) => CommandStep[CommandSuccess]
     )(implicit parameter: Parameter[Param]): Command[RootSender, Param] = new Command[RootSender, Param] {
       override def run(source: RootSender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
         runCmd(source, extra, arg)
 
-      override def children: Map[String, StaticChildCommand] = childMap
+      override def children: Set[ChildCommand] = childSet
     }
 
     /**
       * Create a command with children from a function that takes a parameter and sender of the given types.
       */
-    def withSenderAndChildren[Sender, Param](childMap: Map[String, StaticChildCommand])(
+    def withSenderAndChildren[Sender, Param](childSet: Set[ChildCommand])(
         runCmd: (Sender, RunExtra, Param) => CommandStep[CommandSuccess]
     )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
       new Command[Sender, Param] {
         override def run(source: Sender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
           runCmd(source, extra, arg)
 
-        override def children: Map[String, StaticChildCommand] = childMap
+        override def children: Set[ChildCommand] = childSet
       }
 
     /**
@@ -283,7 +288,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       ): Either[List[RawCmdArg], Seq[String]] = {
         val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
           val res = args.headOption.exists(head => choices.exists(obj => HasName(obj).equalsIgnoreCase(head.content)))
-          if(res) Right((xs.tail, true)) else Left(Command.error("Not parsed"))
+          if (res) Right((xs.tail, true)) else Left(Command.error("Not parsed"))
         }
         ScammanderHelper.suggestionsNamed(parse, xs, choices)
       }

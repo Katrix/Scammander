@@ -45,13 +45,51 @@ import shapeless._
 trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
 
   override protected type Result             = Boolean
-  override protected type StaticChildCommand = ChildCommand
+  override protected type StaticChildCommand = ChildCommandExtra
 
-  case class ChildCommand(command: BukkitCommandWrapper[_, _], permission: String, help: String, description: String)
+  case class ChildCommandExtra(
+      command: BukkitCommandWrapper[_, _],
+      permission: Option[String],
+      help: CommandSender => Option[String],
+      description: CommandSender => Option[String]
+  )
 
   override protected val defaultCommandSuccess: Boolean = true
 
   override protected def tabExtraToRunExtra(extra: BukkitExtra): BukkitExtra = extra
+
+  /**
+    * Helper for creating an alias when registering a command.
+    */
+  object Alias {
+    def apply(first: String, aliases: String*): Set[String] = aliases.toSet + first
+  }
+
+  /**
+    * Helper for creating a alias when registering a command.
+    */
+  object Permission {
+    def apply(perm: String): Some[String] = Some(perm)
+    val none:                None.type    = None
+  }
+
+  /**
+    * Helper for creating a help when registering a command.
+    */
+  object Help {
+    def apply(f: CommandSender => String): CommandSender => Option[String] = f andThen Some.apply
+    def apply(help: String):               CommandSender => Option[String] = _ => Some(help)
+    val none:                              CommandSender => None.type      = _ => None
+  }
+
+  /**
+    * Helper for creating an description when registering a command.
+    */
+  object Description {
+    def apply(f: CommandSender => String): CommandSender => Option[String] = f andThen Some.apply
+    def apply(description: String):        CommandSender => Option[String] = _ => Some(description)
+    val none:                              CommandSender => None.type      = _ => None
+  }
 
   implicit val playerHasName:        HasName[Player]        = (a: Player) => a.getName
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = (a: OfflinePlayer) => a.getName
@@ -193,8 +231,12 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toBukkit: BukkitCommandWrapper[Sender, Param] = BukkitCommandWrapper(command)
-    def toBukkitChild(permission: String = "", help: String = "", description: String = ""): ChildCommand =
-      ChildCommand(command.toBukkit, permission, help, description)
+    def toChild(
+        aliases: Set[String],
+        permission: Option[String] = None,
+        help: CommandSender => Option[String] = _ => None,
+        description: CommandSender => Option[String] = _ => None
+    ): ChildCommand = ChildCommand(aliases, ChildCommandExtra(command.toBukkit, permission, help, description))
 
     def register(plugin: JavaPlugin, name: String): Unit = toBukkit.register(plugin, name)
   }
@@ -243,9 +285,9 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         label: String,
         args: Array[String]
     ): Boolean = {
-      if (args.nonEmpty && command.children.contains(args.head)) {
-        val childCommand = command.children(args.head)
-        if (childCommand.permission.isEmpty || source.hasPermission(childCommand.permission)) {
+      if (args.nonEmpty && command.childrenMap.contains(args.head)) {
+        val childCommand = command.childrenMap(args.head)
+        if (childCommand.permission.forall(source.hasPermission)) {
           childCommand.command.onCommand(source, bukkitCommand, label, args.tail)
         } else {
           source.sendMessage(ChatColor.RED + "You don't have permission to use that command")
@@ -285,9 +327,9 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         alias: String,
         args: Array[String]
     ): util.List[String] = {
-      if (args.nonEmpty && command.children.contains(args.head)) {
-        val childCommand = command.children(args.head)
-        if (childCommand.permission.isEmpty || sender.hasPermission(childCommand.permission)) {
+      if (args.nonEmpty && command.childrenMap.contains(args.head)) {
+        val childCommand = command.childrenMap(args.head)
+        if (childCommand.permission.forall(sender.hasPermission)) {
           childCommand.command.onTabComplete(sender, bukkitCommand, alias, args.tail)
         } else {
           Nil.asJava
@@ -297,10 +339,10 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         val extra      = BukkitExtra(bukkitCommand, alias)
 
         val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
-          val isParsed = xs.headOption.exists(arg => command.children.keys.exists(_.equalsIgnoreCase(arg.content)))
+          val isParsed = xs.headOption.exists(arg => command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content)))
           Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
         }
-        val childSuggestions = ScammanderHelper.suggestions(parse, parsedArgs, command.children.keys)
+        val childSuggestions = ScammanderHelper.suggestions(parse, parsedArgs, command.childrenMap.keys)
         val ret =
           if (parsedArgs.nonEmpty && childSuggestions.isRight) childSuggestions.getOrElse(Nil)
           else {

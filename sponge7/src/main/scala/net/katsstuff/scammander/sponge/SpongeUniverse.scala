@@ -156,8 +156,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
               .toSet
 
             Right(xs.tail -> players)
-          }
-          catch {
+          } catch {
             case e: IllegalArgumentException => Left(Command.error(e.getMessage))
           }
         } else {
@@ -207,8 +206,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
             case EntityType(entity) => entity
           }
           Right((xs.tail, entities.toSet))
-        }
-        catch {
+        } catch {
           case e: IllegalArgumentException => Left(Command.error(e.getMessage))
         }
       } else Left(ScammanderHelper.notEnoughArgs)
@@ -332,8 +330,7 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
             try {
               val entities = Selector.parse(arg).resolve(source).asScala.toSet
               Right(xs.tail -> entities.map(_.getLocation))
-            }
-            catch {
+            } catch {
               case e: IllegalArgumentException => Left(Command.error(e.getMessage))
             }
         }
@@ -525,7 +522,14 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
-    def toSponge(info: CommandInfo): SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, info)
+    def toSponge(info: CommandInfo):                      SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, info)
+    def toChild(aliases: Seq[String], info: CommandInfo): ChildCommand                        = ChildCommand(aliases.toSet, toSponge(info))
+    def toChild(
+        aliases: Seq[String],
+        permission: Option[String] = None,
+        help: CommandSource => Option[Text] = _ => None,
+        shortDescription: CommandSource => Option[Text] = _ => None
+    ): ChildCommand = ChildCommand(aliases.toSet, toSponge(CommandInfo(permission, help, shortDescription)))
 
     def register(
         plugin: AnyRef,
@@ -580,8 +584,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     override def process(source: CommandSource, arguments: String): CommandResult = {
       val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
 
-      if (args.nonEmpty && command.children.contains(args.head.content)) {
-        val childCommand = command.children(args.head.content)
+      if (args.nonEmpty && command.childrenMap.contains(args.head.content)) {
+        val childCommand = command.childrenMap(args.head.content)
         if (childCommand.testPermission(source)) {
           childCommand.process(source, args.tail.mkString(" "))
         } else {
@@ -620,8 +624,8 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
     ): util.List[String] = {
       val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
 
-      if (args.nonEmpty && command.children.contains(args.head.content)) {
-        val childCommand = command.children(args.head.content)
+      if (args.nonEmpty && command.childrenMap.contains(args.head.content)) {
+        val childCommand = command.childrenMap(args.head.content)
         if (childCommand.testPermission(source)) {
           childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
         } else {
@@ -629,10 +633,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         }
       } else {
         val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
-          val isParsed = xs.headOption.exists(arg => command.children.keys.exists(_.equalsIgnoreCase(arg.content)))
+          val isParsed = xs.headOption.exists(arg => command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content)))
           Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
         }
-        val childSuggestions = ScammanderHelper.suggestions(parse, args, command.children.keys)
+        val childSuggestions = ScammanderHelper.suggestions(parse, args, command.childrenMap.keys)
         val ret =
           if (args.nonEmpty && childSuggestions.isRight) childSuggestions.getOrElse(Nil)
           else {
@@ -658,10 +662,10 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
 
     override def getUsage(source: CommandSource): Text = {
       if (command.children.nonEmpty) {
-        val childUsages = command.children.groupBy(_._2.command).map {
-          case (_, aliases) =>
-            val aliasPart = aliases.keys.mkString("|")
-            val usagePart = aliases.head._2.getUsage(source)
+        val childUsages = command.children.map {
+          case ChildCommand(aliases, childCommand) =>
+            val aliasPart = aliases.mkString("|")
+            val usagePart = childCommand.getUsage(source)
             s"$aliasPart $usagePart"
         }
 
