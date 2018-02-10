@@ -86,7 +86,7 @@ trait ScammanderBase[RootSender, RunExtra, TabExtra] {
   type MultipleCommandErrors = scammander.MultipleCommandErrors
   val MultipleCommandErrors: scammander.MultipleCommandErrors.type = scammander.MultipleCommandErrors
 
-  type HashName[A] = scammander.HasName[A]
+  type HasName[A] = scammander.HasName[A]
   val HasName: scammander.HasName.type = scammander.HasName
 
   type RawCmdArg = scammander.RawCmdArg

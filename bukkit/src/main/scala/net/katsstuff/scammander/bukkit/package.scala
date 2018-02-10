@@ -20,4 +20,4 @@
  */
 package net.katsstuff.scammander
 
-package object bukkit extends BukkitBase
+package object bukkit extends BukkitBaseAll
