@@ -289,8 +289,6 @@ trait ScammanderBase[RootSender, RunExtra, TabExtra] {
       }
     }
 
-    def deriver[A]: Deriver[A] = new Deriver[A]
-
     def mkSingleton[A](obj: A)(implicit typeable: Typeable[A]): Parameter[A] = {
       val name =
         if (typeable.describe.endsWith(".type")) typeable.describe.dropRight(5).toLowerCase(Locale.ROOT)

@@ -34,9 +34,12 @@ trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
     ): Parameter[A] = genParam[A, Gen]
   }
 
-  class Deriver[A] {
+  class ParameterDeriver[A] {
     def derive[Repr](implicit gen: LabelledGeneric.Aux[A, Repr], param: Parameter[Repr]): Parameter[A] =
       genParam[A, gen.Repr]
+  }
+  object ParameterDeriver {
+    def apply[A]: ParameterDeriver[A] = new ParameterDeriver[A]
   }
 
   def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Lazy[Parameter[Gen]]): Parameter[A] =
