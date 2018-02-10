@@ -18,8 +18,6 @@ class GenericParameterSpec extends ScammanderSpec {
     def testArgs(args: String, testAgainst: String) =
       suggestions[SuggestionArg](args).mkString(" ") should equal(testAgainst)
 
-    println(suggestions[SuggestionArg](""))
-
     testArgs("", s"$myObjName1 $myObjName2 $myObjName3")
     testArgs("f", s"$myObjName1")
     testArgs("ba", s"$myObjName2 $myObjName3")

@@ -288,7 +288,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       ): Either[List[RawCmdArg], Seq[String]] = {
         val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
           val res = args.headOption.exists(head => choices.exists(obj => HasName(obj).equalsIgnoreCase(head.content)))
-          if (res) Right((xs.tail, true)) else Left(Command.error("Not parsed"))
+          if (res) Right((args.tail, true)) else Left(Command.error("Not parsed"))
         }
         ScammanderHelper.suggestionsNamed(parse, xs, choices)
       }
@@ -458,7 +458,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         extra: RunExtra,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], NotUsed)] =
-      if (xs.nonEmpty) Command.errorStep("Too many arguments for command")
+      if (xs.nonEmpty && xs.head.content.nonEmpty) Command.errorStep("Too many arguments for command")
       else Right(Nil -> NotUsed)
 
     override def suggestions(
@@ -511,8 +511,12 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         source: RootSender,
         extra: RunExtra,
         xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], RemainingAsString)] =
-      Right((Nil, RemainingAsString(xs.map(_.content).mkString(" "))))
+    ): CommandStep[(List[RawCmdArg], RemainingAsString)] = {
+      if (xs.nonEmpty && xs.head.content.nonEmpty) {
+        Right((Nil, RemainingAsString(xs.map(_.content).mkString(" "))))
+      }
+      Left(ScammanderHelper.notEnoughArgs)
+    }
 
     override def suggestions(
         source: RootSender,
@@ -522,48 +526,108 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
   }
 
   /**
-    * Parses a given parameter again and again until it fails.
+    * Parses a given parameter again and again until it fails. Parses at least one.
     */
-  case class AllOff[A](values: Seq[A])
-  object AllOff {
-    implicit def allOfParam[A](implicit param: Parameter[A]): Parameter[AllOff[A]] = new Parameter[AllOff[A]] {
-      override def name: String = s"${param.name}..."
+  case class OneOrMore[A](values: Seq[A])
+  object OneOrMore {
+    implicit def oneOrMoreParam[A](implicit param: Parameter[A]): Parameter[OneOrMore[A]] =
+      new Parameter[OneOrMore[A]] {
+        override def name: String = s"${param.name}..."
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], AllOff[A])] = {
-        @tailrec
-        def inner(xs: List[RawCmdArg], acc: Seq[A]): CommandStep[AllOff[A]] = {
-          if (xs.isEmpty) Right(AllOff(acc))
-          else {
-            param.parse(source, extra, xs) match {
-              case Right((ys, res)) => inner(ys, acc :+ res)
-              case Left(e)          => Left(e)
+        override def parse(
+            source: RootSender,
+            extra: RunExtra,
+            xs: List[RawCmdArg]
+        ): CommandStep[(List[RawCmdArg], OneOrMore[A])] = {
+          @tailrec
+          def inner(xs: List[RawCmdArg], acc: Seq[A]): CommandStep[OneOrMore[A]] = {
+            if (xs.isEmpty) {
+              if (acc.isEmpty) Left(Command.error("Not enough parsed"))
+              else Right(OneOrMore(acc))
+            } else {
+              param.parse(source, extra, xs) match {
+                case Right((ys, res)) => inner(ys, acc :+ res)
+                case Left(e)          => Left(e)
+              }
             }
           }
+
+          inner(xs, Nil).map(Nil -> _)
         }
 
-        inner(xs, Nil).map(Nil -> _)
-      }
-
-      override def suggestions(
-          source: RootSender,
-          extra: TabExtra,
-          xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] = {
-        @tailrec
-        def inner(xs: List[RawCmdArg]): Seq[String] = {
-          param.suggestions(source, extra, xs) match {
-            case Right(suggestions) => suggestions
-            case Left(ys)           => inner(ys)
+        override def suggestions(
+            source: RootSender,
+            extra: TabExtra,
+            xs: List[RawCmdArg]
+        ): Either[List[RawCmdArg], Seq[String]] = {
+          @tailrec
+          def inner(xs: List[RawCmdArg]): Seq[String] = {
+            if (xs.isEmpty) Nil
+            else {
+              param.suggestions(source, extra, xs) match {
+                case Right(suggestions) => suggestions
+                case Left(ys)           => inner(ys)
+              }
+            }
           }
+
+          Right(inner(xs))
         }
 
-        Right(inner(xs))
+        override def usage(source: RootSender): String = s"<$name...>"
       }
-    }
+  }
+
+  /**
+    * Parses a given parameter again and again until it fails. Parses at least zero.
+    */
+  case class ZeroOrMore[A](values: Seq[A])
+  object ZeroOrMore {
+    implicit def zeroOrMoreParam[A](implicit param: Parameter[A]): Parameter[ZeroOrMore[A]] =
+      new Parameter[ZeroOrMore[A]] {
+        override def name: String = s"${param.name}..."
+
+        override def parse(
+            source: RootSender,
+            extra: RunExtra,
+            xs: List[RawCmdArg]
+        ): CommandStep[(List[RawCmdArg], ZeroOrMore[A])] = {
+          @tailrec
+          def inner(xs: List[RawCmdArg], acc: Seq[A]): CommandStep[ZeroOrMore[A]] = {
+            if (xs.isEmpty || xs.head.content.isEmpty) {
+              Right(ZeroOrMore(acc))
+            } else {
+              param.parse(source, extra, xs) match {
+                case Right((ys, res)) => inner(ys, acc :+ res)
+                case Left(e)          => Left(e)
+              }
+            }
+          }
+
+          inner(xs, Nil).map(Nil -> _)
+        }
+
+        override def suggestions(
+            source: RootSender,
+            extra: TabExtra,
+            xs: List[RawCmdArg]
+        ): Either[List[RawCmdArg], Seq[String]] = {
+          @tailrec
+          def inner(xs: List[RawCmdArg]): Seq[String] = {
+            if (xs.isEmpty) Nil
+            else {
+              param.suggestions(source, extra, xs) match {
+                case Right(suggestions) => suggestions
+                case Left(ys)           => inner(ys)
+              }
+            }
+          }
+
+          Right(inner(xs))
+        }
+
+        override def usage(source: RootSender): String = s"[$name...]"
+      }
   }
 
   /**
@@ -608,23 +672,23 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
 
         val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
           val res = args.headOption.exists(arg => flagName.equalsIgnoreCase(arg.content))
-          if (res) flagParam.parse(source, tabExtraToRunExtra(extra), xs.tail).map(t => t._1 -> true)
-          else Left(Command.error("Not a flag"))
+          if (res) Right(xs.tail -> true) else Left(Command.error("Not a flag"))
         }
 
         @tailrec
         def inner(xs: List[RawCmdArg], acc: List[RawCmdArg]): Either[List[RawCmdArg], Seq[String]] = {
-          println(ScammanderHelper.suggestions(parse, xs, Seq(flagName)))
-          ScammanderHelper.suggestions(parse, xs, Seq(flagName)) match {
-            case Right(suggestions) => Right(suggestions)
-            case Left(_) if xs.headOption.map(_.content).exists(_.equalsIgnoreCase(flagName)) =>
-              flagParam.suggestions(source, extra, xs.tail)
-            case Left(Nil) => Left(xs.reverse)
-            case Left(_)   => inner(xs.tail, xs.head :: acc)
-          }
+          if (xs.isEmpty) Left(acc.reverse)
+          else if (xs.head.content.startsWith("-")) {
+            ScammanderHelper.suggestions(parse, xs, Seq(flagName)) match {
+              case Right(suggestions) => Right(suggestions)
+              case Left(_) if xs.headOption.map(_.content).exists(_.equalsIgnoreCase(flagName)) =>
+                flagParam.suggestions(source, extra, xs.tail)
+              case Left(_) => inner(xs.tail, xs.head :: acc)
+            }
+          } else Left(xs)
         }
 
-        inner(xs, Nil)
+        if (xs.isEmpty || xs.head.content.isEmpty) Right(Seq(flagName)) else inner(xs, Nil)
       }
 
       override def usage(source: RootSender): String = s"$flagName ${flagParam.usage(source)}"
@@ -673,15 +737,15 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         @tailrec
         def inner(xs: List[RawCmdArg], acc: List[RawCmdArg]): Either[List[RawCmdArg], Seq[String]] = {
           if (xs.isEmpty) Left(acc.reverse)
-          else {
+          else if (xs.head.content.startsWith("-")) {
             ScammanderHelper.suggestions(parse, xs, Seq(flagName)) match {
               case Right(suggestions) => Right(suggestions)
               case Left(_)            => inner(xs.tail, xs.head :: acc)
             }
-          }
+          } else Left(xs)
         }
 
-        inner(xs, Nil)
+        if (xs.isEmpty || xs.head.content.isEmpty) Right(Seq(flagName)) else inner(xs, Nil)
       }
 
       override def usage(source: RootSender): String = flagName
@@ -706,12 +770,9 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         extra: RunExtra,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Flags[A, B])] = {
-      println(s"Start $xs")
       for {
         t1 <- flagsParam.parse(source, extra, xs)
-        _ = println(s"T1 $t1")
         t2 <- paramParam.parse(source, extra, t1._1)
-        _ = println(s"T2 $t2")
       } yield t2._1 -> Flags(t1._2, t2._2)
     }
 
@@ -720,10 +781,13 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
         extra: TabExtra,
         xs: List[RawCmdArg]
     ): Either[List[RawCmdArg], Seq[String]] = {
-      for {
-        ys <- flagsParam.suggestions(source, extra, xs).left
-        zs <- paramParam.suggestions(source, extra, ys).left
-      } yield zs
+      val flagSuggestions  = flagsParam.suggestions(source, extra, xs)
+      val paramSuggestions = paramParam.suggestions(source, extra, xs)
+
+      flagSuggestions match {
+        case Left(ys)           => paramParam.suggestions(source, extra, ys)
+        case Right(suggestions) => Right(suggestions ++ paramParam.suggestions(source, extra, xs).getOrElse(Nil))
+      }
     }
   }
 
@@ -829,13 +893,13 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       override def name: String = parName
 
       override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
-        if (xs.nonEmpty)
+        if (xs.nonEmpty && xs.head.content.nonEmpty) {
           Try(s(xs.head.content))
             .map(xs.tail -> _)
             .toEither
             .left
-            .map(e => CommandSyntaxError(s"${xs.head.content} is not a valid $name", xs.head.start))
-        else Left(ScammanderHelper.notEnoughArgs)
+            .map(_ => CommandSyntaxError(s"${xs.head.content} is not a valid $name", xs.head.start))
+        } else Left(ScammanderHelper.notEnoughArgs)
 
       override def suggestions(
           source: RootSender,
@@ -853,8 +917,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
       override def name: String = parName
 
       override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], A)] =
-        if (xs.nonEmpty) parser(xs.head.content).map(xs.tail -> _)
-        else Left(ScammanderHelper.notEnoughArgs)
+        stringParam.parse(source, extra, xs).flatMap(t => parser(t._2).map(res => t._1 -> res))
 
       override def suggestions(
           source: RootSender,
@@ -871,7 +934,7 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
   implicit val floatParam:  Parameter[Float]   = primitiveParam("float", _.toFloat)
   implicit val doubleParam: Parameter[Double]  = primitiveParam("double", _.toDouble)
   implicit val boolParam:   Parameter[Boolean] = primitiveParam("boolean", _.toBoolean)
-  implicit val strParam:    Parameter[String]  = primitiveParam("string", identity)
+  implicit val stringParam: Parameter[String]  = primitiveParam("string", identity)
   implicit val unitParam:   Parameter[Unit]    = primitiveParam("", _ => ())
 
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
@@ -882,19 +945,19 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
         extra: RunExtra,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], URL)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        Try(new URL(arg))
-          .flatMap { url =>
-            Try {
-              url.toURI
-              xs.tail -> url
+      stringParam.parse(source, extra, xs).flatMap {
+        case (ys, arg) =>
+          Try(new URL(arg))
+            .flatMap { url =>
+              Try {
+                url.toURI //Checks validity
+                ys -> url
+              }
             }
-          }
-          .toEither
-          .left
-          .map(e => CommandSyntaxError(e.getMessage, pos))
-      } else Left(ScammanderHelper.notEnoughArgs)
+            .toEither
+            .left
+            .map(e => CommandSyntaxError(e.getMessage, xs.head.start))
+      }
     }
 
     override def suggestions(
@@ -916,23 +979,23 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
         extra: RunExtra,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], LocalDateTime)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        Try(LocalDateTime.parse(arg))
-          .recoverWith {
-            case _: DateTimeParseException =>
-              Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg)))
-          }
-          .recoverWith {
-            case _: DateTimeParseException => Try(LocalDateTime.of(LocalDate.parse(arg), LocalTime.MIDNIGHT))
-          }
-          .toEither
-          .left
-          .map { _ =>
-            CommandSyntaxError("Invalid date-time!", pos)
-          }
-          .map(xs.tail -> _)
-      } else Left(ScammanderHelper.notEnoughArgs)
+      stringParam.parse(source, extra, xs).flatMap {
+        case (ys, arg) =>
+          Try(LocalDateTime.parse(arg))
+            .recoverWith {
+              case _: DateTimeParseException =>
+                Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg)))
+            }
+            .recoverWith {
+              case _: DateTimeParseException => Try(LocalDateTime.of(LocalDate.parse(arg), LocalTime.MIDNIGHT))
+            }
+            .toEither
+            .left
+            .map { _ =>
+              CommandSyntaxError("Invalid date-time!", xs.head.start)
+            }
+            .map(ys -> _)
+      }
     }
 
     override def suggestions(
@@ -954,23 +1017,23 @@ trait NormalParametersInstances[RootSender, RunExtra, TabExtra] {
         extra: RunExtra,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Duration)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        val s                      = arg.toUpperCase(Locale.ROOT)
+      stringParam.parse(source, extra, xs).flatMap {
+        case (ys, arg) =>
+          val s = arg.toUpperCase(Locale.ROOT)
 
-        val usedS = if (!s.contains("T")) {
-          val s1 = if (s.contains("D")) {
-            if (s.contains("H") || s.contains("M") || s.contains("S")) s.replace("D", "DT")
-            else if (s.startsWith("P")) "PT" + s.substring(1)
-            else "T" + s
+          val usedS = if (!s.contains("T")) {
+            val s1 = if (s.contains("D")) {
+              if (s.contains("H") || s.contains("M") || s.contains("S")) s.replace("D", "DT")
+              else if (s.startsWith("P")) "PT" + s.substring(1)
+              else "T" + s
+            } else s
+            if (!s1.startsWith("P")) "P" + s1 else s1
           } else s
-          if (!s1.startsWith("P")) "P" + s1 else s1
-        } else s
 
-        Try(Duration.parse(usedS)).toEither.left
-          .map(e => CommandSyntaxError(e.getMessage, pos))
-          .map(xs.tail -> _)
-      } else Left(ScammanderHelper.notEnoughArgs)
+          Try(Duration.parse(usedS)).toEither.left
+            .map(e => CommandSyntaxError(e.getMessage, xs.head.start))
+            .map(ys -> _)
+      }
     }
 
     override def suggestions(

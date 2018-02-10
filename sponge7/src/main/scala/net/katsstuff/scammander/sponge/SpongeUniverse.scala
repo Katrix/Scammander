@@ -141,28 +141,27 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         extra: Unit,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Set[Player])] = {
-      if (xs.nonEmpty) {
-        val head = xs.head.content
+      stringParam.parse(source, extra, xs).flatMap {
+        case (ys, head) =>
+          if (head.startsWith("@")) {
+            try {
+              val players = Selector
+                .parse(xs.head.content)
+                .resolve(source)
+                .asScala
+                .collect {
+                  case player: Player => player
+                }
+                .toSet
 
-        if (head.startsWith("@")) {
-          try {
-            val players = Selector
-              .parse(xs.head.content)
-              .resolve(source)
-              .asScala
-              .collect {
-                case player: Player => player
-              }
-              .toSet
-
-            Right(xs.tail -> players)
-          } catch {
-            case e: IllegalArgumentException => Left(Command.error(e.getMessage))
+              Right(ys -> players)
+            } catch {
+              case e: IllegalArgumentException => Left(Command.error(e.getMessage))
+            }
+          } else {
+            ScammanderHelper.parseMany(name, xs, Sponge.getServer.getOnlinePlayers.asScala)
           }
-        } else {
-          ScammanderHelper.parseMany(name, xs, Sponge.getServer.getOnlinePlayers.asScala)
-        }
-      } else Left(ScammanderHelper.notEnoughArgs)
+      }
     }
 
     override def suggestions(
@@ -200,16 +199,17 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         extra: Unit,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], Set[A])] = {
-      if (xs.nonEmpty) {
-        try {
-          val entities = Selector.parse(xs.head.content).resolve(source).asScala.collect {
-            case EntityType(entity) => entity
+      stringParam.parse(source, extra, xs).flatMap {
+        case (ys, arg) =>
+          try {
+            val entities = Selector.parse(arg).resolve(source).asScala.collect {
+              case EntityType(entity) => entity
+            }
+            Right((ys, entities.toSet))
+          } catch {
+            case e: IllegalArgumentException => Left(Command.error(e.getMessage))
           }
-          Right((xs.tail, entities.toSet))
-        } catch {
-          case e: IllegalArgumentException => Left(Command.error(e.getMessage))
-        }
-      } else Left(ScammanderHelper.notEnoughArgs)
+      }
     }
 
     override def suggestions(
@@ -388,20 +388,19 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         extra: Unit,
         xs: List[RawCmdArg]
     ): CommandStep[(List[RawCmdArg], InetAddress)] = {
-      if (xs.nonEmpty) {
-        val RawCmdArg(pos, _, arg) = xs.head
-        Try {
-          xs.tail -> InetAddress.getByName(arg)
-        }.toEither.left.flatMap {
-          case _: UnknownHostException =>
-            playerParam.parse(source, extra, xs).map {
-              case (ys, player) =>
-                ys -> player.getConnection.getAddress.getAddress
-            }
-          case e => Left(CommandUsageError(e.getMessage, pos))
-        }
-
-      } else Left(ScammanderHelper.notEnoughArgs)
+      stringParam.parse(source, extra, xs).flatMap {
+        case (ys, arg) =>
+          Try {
+            ys -> InetAddress.getByName(arg)
+          }.toEither.left.flatMap {
+            case _: UnknownHostException =>
+              playerParam.parse(source, extra, xs).map {
+                case (zs, player) =>
+                  zs -> player.getConnection.getAddress.getAddress
+              }
+            case e => Left(CommandUsageError(e.getMessage, xs.head.start))
+          }
+      }
     }
 
     override def suggestions(
@@ -622,27 +621,30 @@ trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[Wo
         arguments: String,
         targetPosition: Location[World]
     ): util.List[String] = {
-      val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
+      val args                   = ScammanderHelper.stringToRawArgsQuoted(arguments)
+      lazy val content           = args.head.content
+      lazy val childCommand      = command.childrenMap(content)
+      def headCount(arg: String) = command.children.flatMap(_.aliases).count(_.startsWith(arg))
+      val doChildCommand = if (args.nonEmpty && command.childrenMap.contains(content)) {
+        if (headCount(content) > 1) args.lengthCompare(1) > 0 else true
+      } else false
 
-      if (args.nonEmpty && command.childrenMap.contains(args.head.content)) {
-        val childCommand = command.childrenMap(args.head.content)
-        if (childCommand.testPermission(source)) {
-          childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
-        } else {
-          Nil.asJava
-        }
+      if (doChildCommand && childCommand.testPermission(source)) {
+        childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
       } else {
         val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
-          val isParsed = xs.headOption.exists(arg => command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content)))
+          val isParsed = xs.headOption.exists { arg =>
+            if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
+            else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
+          }
           Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
         }
         val childSuggestions = ScammanderHelper.suggestions(parse, args, command.childrenMap.keys)
-        val ret =
-          if (args.nonEmpty && childSuggestions.isRight) childSuggestions.getOrElse(Nil)
-          else {
-            val paramSuggestions = command.suggestions(source, targetPosition, args)
-            childSuggestions.getOrElse(Nil) ++ paramSuggestions
-          }
+        val paramSuggestions = command.suggestions(source, targetPosition, args)
+        val ret = childSuggestions match {
+          case Right(suggestions) => suggestions ++ paramSuggestions
+          case Left(_)            => paramSuggestions
+        }
 
         ret.asJava
       }

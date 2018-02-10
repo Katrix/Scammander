@@ -46,14 +46,17 @@ object ScammanderHelper {
     * as as they are not quoted.
     */
   def stringToRawArgsQuoted(argumments: String): List[RawCmdArg] = {
-    quotedRegex
-      .findAllMatchIn(argumments)
-      .map { m =>
-        val quoted = m.group(1) != null
-        val group  = if (quoted) 1 else 2
-        RawCmdArg(m.start(group), m.end(group), m.group(group))
-      }
-      .toList
+    if(argumments.isEmpty) List(RawCmdArg(0, 0, ""))
+    else {
+      quotedRegex
+        .findAllMatchIn(argumments)
+        .map { m =>
+          val quoted = m.group(1) != null
+          val group  = if (quoted) 1 else 2
+          RawCmdArg(m.start(group), m.end(group), m.group(group))
+        }
+        .toList
+    }
   }
 
   /**
@@ -69,7 +72,7 @@ object ScammanderHelper {
       .fold(_ => {
         val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
         if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
-          Left(xs.drop(1))
+          Right(Nil)
         else Right(startsWith.getOrElse(choices.toSeq))
       }, t => Left(t._1))
   }
@@ -93,7 +96,7 @@ object ScammanderHelper {
       choices: Map[String, A]
   ): Either[CommandFailure, (List[RawCmdArg], A)] = {
     assert(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
-    if (xs.nonEmpty) {
+    if (xs.nonEmpty && xs.head.content.nonEmpty) {
       val head = xs.head
       choices
         .get(head.content.toLowerCase(Locale.ROOT))
@@ -124,7 +127,7 @@ object ScammanderHelper {
       Pattern.compile(usedInput, Pattern.CASE_INSENSITIVE)
     }
 
-    if (xs.nonEmpty) {
+    if (xs.nonEmpty && xs.head.content.nonEmpty) {
       val RawCmdArg(pos, _, unformattedPattern) = xs.head
 
       val pattern         = formattedPattern(unformattedPattern)

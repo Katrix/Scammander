@@ -26,7 +26,7 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderUniverse[Unit
 
   def parse[A](arguments: String, checkEmpty: Boolean = true)(implicit param: Parameter[A]): Option[A] = {
     val parsed = param.parse((), (), mkArgs(arguments))
-    if (checkEmpty) {
+    if (checkEmpty && arguments.nonEmpty) {
       parsed.foreach {
         case (xs, _) =>
           assert(xs.isEmpty)

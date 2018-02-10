@@ -24,6 +24,7 @@ import java.net.InetAddress
 import java.util
 
 import scala.collection.JavaConverters._
+import scala.util.control.NonFatal
 
 import org.bukkit.command.{
   BlockCommandSender,
@@ -167,8 +168,16 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         source: CommandSender,
         extra: BukkitExtra,
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] =
-      ScammanderHelper.suggestionsNamed(parse(source, extra, _), xs, Bukkit.getOfflinePlayers)
+    ): Either[List[RawCmdArg], Seq[String]] = {
+      val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
+        val res = args.headOption.exists { head =>
+          Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(head.content))
+        }
+        if (res) Right((args.tail, true)) else Left(Command.error("Not parsed"))
+      }
+
+      ScammanderHelper.suggestionsNamed(parse, xs, Bukkit.getOfflinePlayers)
+    }
   }
 
   implicit val worldParam: Parameter[Set[World]] = Parameter.mkNamed("world", Bukkit.getWorlds.asScala)
@@ -285,39 +294,45 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         label: String,
         args: Array[String]
     ): Boolean = {
-      if (args.nonEmpty && command.childrenMap.contains(args.head)) {
-        val childCommand = command.childrenMap(args.head)
-        if (childCommand.permission.forall(source.hasPermission)) {
-          childCommand.command.onCommand(source, bukkitCommand, label, args.tail)
+      try {
+        if (args.nonEmpty && command.childrenMap.contains(args.head)) {
+          val childCommand = command.childrenMap(args.head)
+          if (childCommand.permission.forall(source.hasPermission)) {
+            childCommand.command.onCommand(source, bukkitCommand, label, args.tail)
+          } else {
+            source.sendMessage(ChatColor.RED + "You don't have permission to use that command")
+            false
+          }
         } else {
-          source.sendMessage(ChatColor.RED + "You don't have permission to use that command")
-          false
-        }
-      } else {
-        val extra = BukkitExtra(bukkitCommand, label)
-        val res = for {
-          sender <- command.userValidator.validate(source)
-          param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
-          result <- command.run(sender, extra, param._2)
-        } yield result
+          val extra = BukkitExtra(bukkitCommand, label)
+          val res = for {
+            sender <- command.userValidator.validate(source)
+            param  <- command.par.parse(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
+            result <- command.run(sender, extra, param._2)
+          } yield result
 
-        res match {
-          case Right(CommandSuccess(result)) => result
-          case Left(CommandError(msg)) =>
-            source.sendMessage(ChatColor.RED + msg)
-            true
-          case Left(CommandSyntaxError(msg, _)) =>
-            //TODO: Show error location
-            source.sendMessage(ChatColor.RED + msg)
-            true
-          case Left(CommandUsageError(msg, _)) =>
-            //TODO: Show error location
-            source.sendMessage(ChatColor.RED + msg)
-            true
-          case Left(e: MultipleCommandErrors) =>
-            source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
-            true
+          res match {
+            case Right(CommandSuccess(result)) => result
+            case Left(CommandError(msg)) =>
+              source.sendMessage(ChatColor.RED + msg)
+              true
+            case Left(CommandSyntaxError(msg, _)) =>
+              //TODO: Show error location
+              source.sendMessage(ChatColor.RED + msg)
+              true
+            case Left(CommandUsageError(msg, _)) =>
+              //TODO: Show error location
+              source.sendMessage(ChatColor.RED + msg)
+              true
+            case Left(e: MultipleCommandErrors) =>
+              source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
+              true
+          }
         }
+      } catch {
+        case NonFatal(e) =>
+          e.printStackTrace()
+          false
       }
     }
 
@@ -327,30 +342,40 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
         alias: String,
         args: Array[String]
     ): util.List[String] = {
-      if (args.nonEmpty && command.childrenMap.contains(args.head)) {
-        val childCommand = command.childrenMap(args.head)
-        if (childCommand.permission.forall(sender.hasPermission)) {
+      try {
+        lazy val head              = args.head
+        lazy val childCommand      = command.childrenMap(head)
+        def headCount(arg: String) = command.children.flatMap(_.aliases).count(_.startsWith(arg))
+        val doChildCommand = if (args.nonEmpty && command.childrenMap.contains(head)) {
+          if (headCount(head) > 1) args.lengthCompare(1) > 0 else true
+        } else false
+
+        if (doChildCommand && childCommand.permission.forall(sender.hasPermission)) {
           childCommand.command.onTabComplete(sender, bukkitCommand, alias, args.tail)
         } else {
-          Nil.asJava
-        }
-      } else {
-        val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
-        val extra      = BukkitExtra(bukkitCommand, alias)
+          val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
+          val extra      = BukkitExtra(bukkitCommand, alias)
 
-        val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
-          val isParsed = xs.headOption.exists(arg => command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content)))
-          Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
-        }
-        val childSuggestions = ScammanderHelper.suggestions(parse, parsedArgs, command.childrenMap.keys)
-        val ret =
-          if (parsedArgs.nonEmpty && childSuggestions.isRight) childSuggestions.getOrElse(Nil)
-          else {
-            val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
-            childSuggestions.getOrElse(Nil) ++ paramSuggestions
+          val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
+            val isParsed = xs.headOption.exists { arg =>
+              if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
+              else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
+            }
+            Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
+          }
+          val childSuggestions = ScammanderHelper.suggestions(parse, parsedArgs, command.childrenMap.keys)
+          val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
+          val ret = childSuggestions match {
+            case Right(suggestions) => suggestions ++ paramSuggestions
+            case Left(_)            => paramSuggestions
           }
 
-        ret.asJava
+          ret.asJava
+        }
+      } catch {
+        case NonFatal(e) =>
+          e.printStackTrace()
+          Nil.asJava
       }
     }
 
@@ -358,6 +383,12 @@ trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, Bukk
       val cmd = plugin.getCommand(name)
       cmd.setExecutor(this)
       cmd.setTabCompleter(this)
+    }
+
+    def unregister(plugin: JavaPlugin, name: String): Unit = {
+      val cmd = plugin.getCommand(name)
+      cmd.setExecutor(null)
+      cmd.setTabCompleter(null)
     }
   }
 }
