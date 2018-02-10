@@ -20,8 +20,6 @@
  */
 package net.katsstuff.scammander
 
-import java.time.LocalDateTime
-
 trait OrParameters[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
 

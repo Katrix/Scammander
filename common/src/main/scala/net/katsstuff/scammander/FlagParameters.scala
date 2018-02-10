@@ -179,7 +179,6 @@ trait FlagParameters[RootSender, RunExtra, TabExtra] {
         xs: List[RawCmdArg]
     ): Either[List[RawCmdArg], Seq[String]] = {
       val flagSuggestions  = flagsParam.suggestions(source, extra, xs)
-      val paramSuggestions = paramParam.suggestions(source, extra, xs)
 
       flagSuggestions match {
         case Left(ys)           => paramParam.suggestions(source, extra, ys)
