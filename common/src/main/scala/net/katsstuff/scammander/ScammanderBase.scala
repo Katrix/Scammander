@@ -23,6 +23,7 @@ package net.katsstuff.scammander
 import java.util.Locale
 
 import scala.annotation.implicitNotFound
+import scala.language.higherKinds
 
 import net.katsstuff.scammander
 import shapeless._
@@ -30,12 +31,17 @@ import shapeless._
 trait ScammanderBase[RootSender, RunExtra, TabExtra] {
 
   protected type Result
-  protected type StaticChildCommand
+  protected type StaticChildCommand[Sender, Param] <: SharedStaticChildCommand[Sender, Param]
 
   protected val defaultCommandSuccess: Result
   protected def tabExtraToRunExtra(extra: TabExtra): RunExtra
 
-  case class ChildCommand(aliases: Set[String], command: StaticChildCommand)
+  trait SharedStaticChildCommand[Sender, Param] {
+
+    def command: Command[Sender, Param]
+  }
+
+  case class ChildCommand[Sender, Param](aliases: Set[String], command: StaticChildCommand[Sender, Param])
 
   /**
     * A successful run of a command.
@@ -102,9 +108,9 @@ trait ScammanderBase[RootSender, RunExtra, TabExtra] {
 
     def usage(source: RootSender): String = par.usage(source)
 
-    def children: Set[ChildCommand] = Set.empty
+    def children: Set[ChildCommand[_, _]] = Set.empty
 
-    lazy val childrenMap: Map[String, StaticChildCommand] =
+    lazy val childrenMap: Map[String, StaticChildCommand[_, _]] =
       children.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
   }
   object Command {
@@ -135,26 +141,26 @@ trait ScammanderBase[RootSender, RunExtra, TabExtra] {
       * Create a simple command with children from a function that takes a
       * parameter of the given type.
       */
-    def withChildren[Param](childSet: Set[ChildCommand])(
+    def withChildren[Param](childSet: Set[ChildCommand[_, _]])(
         runCmd: (RootSender, RunExtra, Param) => CommandStep[CommandSuccess]
     )(implicit parameter: Parameter[Param]): Command[RootSender, Param] = new Command[RootSender, Param] {
       override def run(source: RootSender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
         runCmd(source, extra, arg)
 
-      override def children: Set[ChildCommand] = childSet
+      override def children: Set[ChildCommand[_, _]] = childSet
     }
 
     /**
       * Create a command with children from a function that takes a parameter and sender of the given types.
       */
-    def withSenderAndChildren[Sender, Param](childSet: Set[ChildCommand])(
+    def withSenderAndChildren[Sender, Param](childSet: Set[ChildCommand[_, _]])(
         runCmd: (Sender, RunExtra, Param) => CommandStep[CommandSuccess]
     )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
       new Command[Sender, Param] {
         override def run(source: Sender, extra: RunExtra, arg: Param): CommandStep[CommandSuccess] =
           runCmd(source, extra, arg)
 
-        override def children: Set[ChildCommand] = childSet
+        override def children: Set[ChildCommand[_, _]] = childSet
       }
 
     /**
