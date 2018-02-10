@@ -23,8 +23,6 @@ package net.katsstuff.scammander
 import java.util.Locale
 import java.util.regex.Pattern
 
-import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
-
 object ScammanderHelper {
 
   private val spaceRegex = """\S+""".r

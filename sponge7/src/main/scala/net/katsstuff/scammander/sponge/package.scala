@@ -20,4 +20,4 @@
  */
 package net.katsstuff.scammander
 
-package object sponge extends SpongeUniverse
+package object sponge extends SpongeBase

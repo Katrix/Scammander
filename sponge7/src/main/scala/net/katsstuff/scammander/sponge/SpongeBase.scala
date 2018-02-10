@@ -48,12 +48,11 @@ import org.spongepowered.api.{CatalogType, Sponge}
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
-import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
-import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
+import net.katsstuff.scammander.{HasName, RawCmdArg, ScammanderHelper, ScammanderBase}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless._
 
-trait SpongeUniverse extends ScammanderUniverse[CommandSource, Unit, Location[World]] {
+trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
 
   override protected type Result             = Int
   override protected type StaticChildCommand = SpongeCommandWrapper[_, _]

@@ -18,12 +18,19 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package net.katsstuff.scammander.misc
+package net.katsstuff.scammander
 
 /**
-  * A single unparsed argument.
-  * @param start The start position of the argument.
-  * @param end The end position of the argument.
-  * @param content The string content of the argument.
+  * Proof that a type has a name.
   */
-case class RawCmdArg(start: Int, end: Int, content: String)
+trait HasName[A] {
+
+  /**
+    * Get the name of this object.
+    */
+  def apply(a: A): String
+}
+object HasName {
+  def apply[A](obj: A)(implicit hasName: HasName[A]): String     = hasName(obj)
+  def apply[A](implicit hasName: HasName[A]):         HasName[A] = hasName
+}

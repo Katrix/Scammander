@@ -26,24 +26,17 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import org.bukkit.command.{
-  BlockCommandSender,
-  CommandSender,
-  ProxiedCommandSender,
-  TabExecutor,
-  Command => BukkitCommand
-}
+import org.bukkit.command.{BlockCommandSender, CommandSender, ProxiedCommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.entity.{Entity, Player}
 import org.bukkit.plugin.Plugin
 import org.bukkit.plugin.java.JavaPlugin
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, ChatColor, Location, OfflinePlayer, World}
 
-import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
-import net.katsstuff.scammander.{ScammanderHelper, ScammanderUniverse}
+import net.katsstuff.scammander.{HasName, RawCmdArg, ScammanderHelper, ScammanderBase}
 import shapeless._
 
-trait BukkitUniverse extends ScammanderUniverse[CommandSender, BukkitExtra, BukkitExtra] {
+trait BukkitBase extends ScammanderBase[CommandSender, BukkitExtra, BukkitExtra] {
 
   override protected type Result             = Boolean
   override protected type StaticChildCommand = ChildCommandExtra

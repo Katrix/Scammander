@@ -2,9 +2,9 @@ package net.katsstuff.scammander
 
 import org.scalatest.{Assertion, FunSuite, Matchers}
 
-import net.katsstuff.scammander.misc.{HasName, RawCmdArg}
+import RawCmdArg
 
-class ScammanderSpec extends FunSuite with Matchers with ScammanderUniverse[Unit, Unit, Unit] {
+class ScammanderSpec extends FunSuite with Matchers with ScammanderBase[Unit, Unit, Unit] {
 
   override protected type Result             = Unit
   override protected type StaticChildCommand = Unit

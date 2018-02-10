@@ -20,4 +20,11 @@
  */
 package net.katsstuff.scammander
 
-package object bukkit extends BukkitBase
+trait ScammanderBaseAll[RootSender, RunExtra, TabExtra]
+    extends ScammanderBase[RootSender, RunExtra, TabExtra]
+    with NormalParameters[RootSender, RunExtra, TabExtra]
+    with ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
+    with HelperParameters[RootSender, RunExtra, TabExtra]
+    with FlagParameters[RootSender, RunExtra, TabExtra]
+    with OrParameters[RootSender, RunExtra, TabExtra]
+    with OrNowParameter[RootSender, RunExtra, TabExtra]
