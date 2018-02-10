@@ -515,7 +515,7 @@ trait ScammanderUniverse[RootSender, RunExtra, TabExtra]
       if (xs.nonEmpty && xs.head.content.nonEmpty) {
         Right((Nil, RemainingAsString(xs.map(_.content).mkString(" "))))
       }
-      Left(ScammanderHelper.notEnoughArgs)
+      else Left(ScammanderHelper.notEnoughArgs)
     }
 
     override def suggestions(
