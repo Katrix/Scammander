@@ -93,6 +93,20 @@ trait BukkitBase extends ScammanderBase[CommandSender, BukkitExtra, BukkitExtra]
     ): ChildCommand[Sender, Param] =
       ChildCommand(aliases, ChildCommandExtra(command.toBukkit, permission, help, description))
 
+    def toRootChild(plugin: JavaPlugin, name: String): ChildCommand[Sender, Param] = {
+      val bukkitCommand = plugin.getCommand(name)
+
+      ChildCommand(
+        bukkitCommand.getAliases.asScala.toSet,
+        ChildCommandExtra(
+          toBukkit,
+          Option(bukkitCommand.getPermission),
+          Help.none,
+          Description(bukkitCommand.getDescription)
+        )
+      )
+    }
+
     def register(plugin: JavaPlugin, name: String): Unit = toBukkit.register(plugin, name)
   }
 
