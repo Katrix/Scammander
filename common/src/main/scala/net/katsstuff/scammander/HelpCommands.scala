@@ -5,15 +5,18 @@ trait HelpCommands[RootSender, RunExtra, TabExtra] {
     with NormalParameters[RootSender, RunExtra, TabExtra]
     with HelperParameters[RootSender, RunExtra, TabExtra] =>
 
-  def sendMultipleCommandHelp(source: RootSender, commands: Set[ChildCommand[_, _]]): CommandStep[CommandSuccess]
+  type Title
+
+  def sendMultipleCommandHelp(title: Title, source: RootSender, commands: Set[ChildCommand[_, _]]): CommandStep[CommandSuccess]
 
   def sendCommandHelp(
+      title: Title,
       source: RootSender,
       command: StaticChildCommand[_, _],
       path: List[String]
   ): CommandStep[CommandSuccess]
 
-  def helpCommand(commands: Set[ChildCommand[_, _]]): Command[RootSender, ZeroOrMore[String]] =
+  def helpCommand(title: Title, commands: Set[ChildCommand[_, _]]): Command[RootSender, ZeroOrMore[String]] =
     new Command[RootSender, ZeroOrMore[String]]() {
       private val commandMap: Map[String, StaticChildCommand[_, _]] =
         commands.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
@@ -21,7 +24,7 @@ trait HelpCommands[RootSender, RunExtra, TabExtra] {
       override def run(source: RootSender, extra: RunExtra, arg: ZeroOrMore[String]): CommandStep[CommandSuccess] =
         arg match {
           case ZeroOrMore(Nil) =>
-            sendMultipleCommandHelp(source, commands)
+            sendMultipleCommandHelp(title, source, commands)
           case ZeroOrMore(Seq(head, tail @ _*)) =>
             val first = commandMap.get(head).toStep(s"No command named $head").map(List(head) -> _)
             val childCommandStep = tail.foldLeft(first) {
@@ -31,7 +34,7 @@ trait HelpCommands[RootSender, RunExtra, TabExtra] {
             }
 
             childCommandStep.flatMap {
-              case (path, childCommand) => sendCommandHelp(source, childCommand, path.reverse)
+              case (path, childCommand) => sendCommandHelp(title, source, childCommand, path.reverse)
             }
         }
     }

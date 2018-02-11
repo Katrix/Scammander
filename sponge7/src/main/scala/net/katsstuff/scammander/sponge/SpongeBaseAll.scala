@@ -11,3 +11,4 @@ trait SpongeBaseAll
     with SpongeValidators
     with SpongeParameter
     with SpongeOrParameter
+    with SpongeHelpCommands
