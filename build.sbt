@@ -39,7 +39,7 @@ lazy val publishSettings = Seq(
 
 lazy val noPublishSettings = Seq(publish := {}, publishLocal := {}, publishArtifact := false)
 
-lazy val scammanderVersion = "0.2-SNAPSHOT"
+lazy val scammanderVersion = "0.3-SNAPSHOT"
 
 lazy val common = project.settings(
   commonSettings,
