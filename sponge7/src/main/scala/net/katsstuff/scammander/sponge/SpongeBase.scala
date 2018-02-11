@@ -191,12 +191,11 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
           case ChildCommand(aliases, childCommand) =>
             val aliasPart = aliases.mkString("|")
             val usagePart = childCommand.getUsage(source)
-            s"$aliasPart $usagePart"
+            Text.of(aliasPart, usagePart)
         }
 
         val childUsage = childUsages.mkString("|")
-        val usage      = s"$childUsage|${command.usage(source)}"
-        Text.of(usage)
+        Text.of(childUsage, "|", command.usage(source))
       } else {
         Text.of(command.usage(source))
       }
