@@ -137,19 +137,27 @@ trait BukkitBase extends ScammanderBase[CommandSender, BukkitExtra, BukkitExtra]
 
           res match {
             case Right(CommandSuccess(result)) => result
-            case Left(CommandError(msg)) =>
+            case Left(CommandError(msg, true)) =>
+              source.sendMessage(s"${ChatColor.RED}$msg\n${command.usage(source)}")
+              true
+            case Left(CommandError(msg, false)) =>
               source.sendMessage(ChatColor.RED + msg)
               true
             case Left(CommandSyntaxError(msg, _)) =>
               //TODO: Show error location
-              source.sendMessage(ChatColor.RED + msg)
+              val toSend = s"${ChatColor.RED}$msg\nUsage: ${command.usage(source)}"
+
+              source.sendMessage(toSend)
               true
             case Left(CommandUsageError(msg, _)) =>
               //TODO: Show error location
-              source.sendMessage(ChatColor.RED + msg)
+              val toSend = s"${ChatColor.RED}$msg\nUsage: ${command.usage(source)}"
+
+              source.sendMessage(toSend)
               true
             case Left(e: MultipleCommandErrors) =>
-              source.sendMessage(ChatColor.RED + e.msg) //TODO: Better error here
+              val usage = if(e.shouldShowUsage) s"\nUsage: ${command.usage(source)}" else ""
+              source.sendMessage(s"${ChatColor.RED}${e.msg}$usage") //TODO: Better error here
               true
           }
         }

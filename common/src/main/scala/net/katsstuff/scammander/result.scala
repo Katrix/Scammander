@@ -24,6 +24,7 @@ package net.katsstuff.scammander
   * Base trait for all command failures.
   */
 sealed trait CommandFailure {
+  def shouldShowUsage: Boolean
   def msg: String
   def merge(failure: CommandFailure): CommandFailure = failure match {
     case multiple: MultipleCommandErrors => multiple.merge(this)
@@ -34,17 +35,21 @@ sealed trait CommandFailure {
 /**
   * A generic command failure.
   */
-case class CommandError(msg: String) extends CommandFailure
+case class CommandError(msg: String, shouldShowUsage: Boolean = false) extends CommandFailure
 
 /**
   * A syntax command failure.
   */
-case class CommandSyntaxError(msg: String, position: Int) extends CommandFailure
+case class CommandSyntaxError(msg: String, position: Int) extends CommandFailure {
+  override def shouldShowUsage: Boolean = true
+}
 
 /**
   * A usage command failure.
   */
-case class CommandUsageError(msg: String, position: Int) extends CommandFailure
+case class CommandUsageError(msg: String, position: Int) extends CommandFailure {
+  override def shouldShowUsage: Boolean = true
+}
 
 /**
   * Represents multiple command failures.
@@ -54,4 +59,6 @@ case class MultipleCommandErrors(failures: Seq[CommandFailure]) extends CommandF
 
   //We don't want to show too many errors
   override def msg: String = failures.take(5).zipWithIndex.map(t => s"Err${t._2}: ${t._1.msg}").mkString("\n")
+
+  override def shouldShowUsage: Boolean = failures.exists(_.shouldShowUsage)
 }

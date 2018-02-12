@@ -122,7 +122,9 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
 
         res match {
           case Right(CommandSuccess(count)) => CommandResult.successCount(count)
-          case Left(CommandError(msg))      => throw new CommandException(Text.of(msg))
+          case Left(CommandError(msg, true)) =>
+            throw new CommandException(Text.of(msg).concat(Text.NEW_LINE).concat(getUsage(source)))
+          case Left(CommandError(msg, false)) => throw new CommandException(Text.of(msg))
           case Left(CommandSyntaxError(msg, pos)) =>
             val e =
               if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
