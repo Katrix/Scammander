@@ -185,21 +185,7 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
       case None       => Optional.empty()
     }
 
-    override def getUsage(source: CommandSource): Text = {
-      if (command.children.nonEmpty) {
-        val childUsages = command.children.map {
-          case ChildCommand(aliases, childCommand) =>
-            val aliasPart = aliases.mkString("|")
-            val usagePart = childCommand.getUsage(source)
-            Text.of(aliasPart, usagePart)
-        }
-
-        val childUsage = childUsages.mkString("|")
-        Text.of(childUsage, "|", command.usage(source))
-      } else {
-        Text.of(command.usage(source))
-      }
-    }
+    override def getUsage(source: CommandSource): Text = Text.of(command.usage(source))
 
     def register(plugin: AnyRef, aliases: Seq[String]): Option[CommandMapping] = {
       val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)
