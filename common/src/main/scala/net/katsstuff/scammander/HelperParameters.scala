@@ -131,7 +131,7 @@ trait HelperParameters[RootSender, RunExtra, TabExtra] {
           Right(inner(xs))
         }
 
-        override def usage(source: RootSender): String = s"<$name...>"
+        override def usage(source: RootSender): String = s"<${param.name}...>"
       }
   }
 
@@ -183,7 +183,7 @@ trait HelperParameters[RootSender, RunExtra, TabExtra] {
           Right(inner(xs))
         }
 
-        override def usage(source: RootSender): String = s"[$name...]"
+        override def usage(source: RootSender): String = s"[${param.name}...]"
       }
   }
 
