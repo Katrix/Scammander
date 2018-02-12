@@ -16,9 +16,9 @@ trait HelpCommands[RootSender, RunExtra, TabExtra] {
       path: List[String]
   ): CommandStep[CommandSuccess]
 
-  def helpCommand(title: Title, commands: Set[ChildCommand[_, _]]): Command[RootSender, ZeroOrMore[String]] =
+  def helpCommand(title: Title, commands: => Set[ChildCommand[_, _]]): Command[RootSender, ZeroOrMore[String]] =
     new Command[RootSender, ZeroOrMore[String]]() {
-      private val commandMap: Map[String, StaticChildCommand[_, _]] =
+      private lazy val commandMap: Map[String, StaticChildCommand[_, _]] =
         commands.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
 
       override def run(source: RootSender, extra: RunExtra, arg: ZeroOrMore[String]): CommandStep[CommandSuccess] =
