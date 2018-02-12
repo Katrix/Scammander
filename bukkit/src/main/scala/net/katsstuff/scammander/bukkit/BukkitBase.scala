@@ -97,12 +97,12 @@ trait BukkitBase extends ScammanderBase[CommandSender, BukkitExtra, BukkitExtra]
       val bukkitCommand = plugin.getCommand(name)
 
       ChildCommand(
-        bukkitCommand.getAliases.asScala.toSet,
+        bukkitCommand.getAliases.asScala.toSet + bukkitCommand.getName,
         ChildCommandExtra(
           toBukkit,
           Option(bukkitCommand.getPermission),
           Help.none,
-          Description(bukkitCommand.getDescription)
+          if (bukkitCommand.getDescription.isEmpty) Description.none else Description(bukkitCommand.getDescription)
         )
       )
     }
