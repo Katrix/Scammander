@@ -23,6 +23,8 @@ package net.katsstuff.scammander
 import shapeless._
 import shapeless.labelled.FieldType
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait ParameterLabelledDeriver[RootSender, RunExtra, TabExtra]
     extends ParameterDeriver[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>

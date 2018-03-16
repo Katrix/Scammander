@@ -7,6 +7,7 @@ import org.bukkit.command.{BlockCommandSender, CommandSender, ProxiedCommandSend
 import org.bukkit.entity.{Entity, Player}
 import org.bukkit.util.{Vector => BukkitVector}
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.ScammanderBase
 import shapeless.{TypeCase, Typeable}
 

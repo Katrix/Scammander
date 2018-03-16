@@ -20,6 +20,8 @@
  */
 package net.katsstuff.scammander
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait OrParameters[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
 

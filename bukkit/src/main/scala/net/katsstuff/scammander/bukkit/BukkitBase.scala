@@ -29,6 +29,7 @@ import org.bukkit.ChatColor
 import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.plugin.java.JavaPlugin
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait BukkitBase extends ScammanderBase[CommandSender, BukkitExtra, BukkitExtra] {

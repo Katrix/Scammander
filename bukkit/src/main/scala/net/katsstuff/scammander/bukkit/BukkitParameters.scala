@@ -8,6 +8,7 @@ import org.bukkit.util.{Vector => BukkitVector}
 
 import scala.collection.JavaConverters._
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import shapeless.Witness
 
@@ -16,10 +17,10 @@ trait BukkitParameters {
     with NormalParameters[CommandSender, BukkitExtra, BukkitExtra]
     with HelperParameters[CommandSender, BukkitExtra, BukkitExtra] =>
 
-  implicit val playerHasName:        HasName[Player]        = (a: Player) => a.getName
-  implicit val offlinePlayerHasName: HasName[OfflinePlayer] = (a: OfflinePlayer) => a.getName
-  implicit val worldHasName:         HasName[World]         = (a: World) => a.getName
-  implicit val pluginHasName:        HasName[Plugin]        = (a: Plugin) => a.getName
+  implicit val playerHasName:        HasName[Player]        = HasName.instance((a: Player) => a.getName)
+  implicit val offlinePlayerHasName: HasName[OfflinePlayer] = HasName.instance((a: OfflinePlayer) => a.getName)
+  implicit val worldHasName:         HasName[World]         = HasName.instance((a: World) => a.getName)
+  implicit val pluginHasName:        HasName[Plugin]        = HasName.instance((a: Plugin) => a.getName)
 
   /**
     * A class to use for parameter that should require a specific permission.

@@ -26,6 +26,7 @@ import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
 import net.katsstuff.scammander
+import net.katsstuff.scammander.CrossCompatibility._
 import shapeless._
 
 trait ScammanderBase[RootSender, RunExtra, TabExtra] {
@@ -64,8 +65,10 @@ trait ScammanderBase[RootSender, RunExtra, TabExtra] {
     /**
       * Create a user validator from a function.
       */
-    def mkValidator[A](validator: RootSender => CommandStep[A]): UserValidator[A] =
-      (sender: RootSender) => validator(sender)
+    //noinspection ConvertExpressionToSAM
+    def mkValidator[A](validator: RootSender => CommandStep[A]): UserValidator[A] = new UserValidator[A] {
+      override def validate(sender: RootSender): CommandStep[A] = validator(sender)
+    }
 
     implicit val rootValidator: UserValidator[RootSender] = mkValidator(Right.apply)
   }

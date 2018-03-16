@@ -1,5 +1,7 @@
 package net.katsstuff.scammander
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait HelpCommands[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra]
     with NormalParameters[RootSender, RunExtra, TabExtra]

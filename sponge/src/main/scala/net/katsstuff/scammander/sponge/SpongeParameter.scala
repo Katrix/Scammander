@@ -23,6 +23,7 @@ import org.spongepowered.api.{CatalogType, Sponge}
 
 import com.flowpowered.math.vector.Vector3d
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless.{TypeCase, Typeable, Witness}
@@ -33,10 +34,10 @@ trait SpongeParameter {
     with HelperParameters[CommandSource, Unit, Location[World]]
     with SpongeValidators =>
 
-  implicit val playerHasName:                        HasName[Player]          = (a: Player) => a.getName
-  implicit val worldHasName:                         HasName[WorldProperties] = (a: WorldProperties) => a.getWorldName
-  implicit def catalogTypeHasName[A <: CatalogType]: HasName[A]               = (a: A) => a.getId
-  implicit val pluginHasName:                        HasName[PluginContainer] = (a: PluginContainer) => a.getId
+  implicit val playerHasName:                        HasName[Player]          = HasName.instance((a: Player) => a.getName)
+  implicit val worldHasName:                         HasName[WorldProperties] = HasName.instance((a: WorldProperties) => a.getWorldName)
+  implicit def catalogTypeHasName[A <: CatalogType]: HasName[A]               = HasName.instance((a: A) => a.getId)
+  implicit val pluginHasName:                        HasName[PluginContainer] = HasName.instance((a: PluginContainer) => a.getId)
 
   /**
     * A class to use for parameter that should require a specific permission.
@@ -360,7 +361,10 @@ trait SpongeParameter {
     ): CommandStep[(List[RawCmdArg], DataContainer)] = {
       remainingAsStringParam.parse(source, extra, xs).flatMap {
         case (ys, RemainingAsString(str)) =>
-          val reader: Callable[BufferedReader] = () => new BufferedReader(new StringReader(str))
+          //noinspection ConvertExpressionToSAM
+          val reader: Callable[BufferedReader] = new Callable[BufferedReader] {
+            override def call(): BufferedReader = new BufferedReader(new StringReader(str))
+          }
           val loader = HoconConfigurationLoader.builder.setSource(reader).build
 
           Try {

@@ -24,6 +24,8 @@ import scala.annotation.tailrec
 
 import shapeless.Witness
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait FlagParameters[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
 

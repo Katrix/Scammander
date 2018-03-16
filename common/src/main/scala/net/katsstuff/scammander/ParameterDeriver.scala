@@ -22,6 +22,8 @@ package net.katsstuff.scammander
 
 import shapeless._
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait ParameterDeriver[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
 

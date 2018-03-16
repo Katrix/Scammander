@@ -9,6 +9,7 @@ import scala.collection.JavaConverters._
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.{OrParameters, ScammanderBase}
 import shapeless._
 
@@ -24,6 +25,11 @@ trait SpongeOrParameter {
     def getTarget(source: CommandSource, pos: Int): CommandStep[A]
   }
   object Targeter {
+    //noinspection ConvertExpressionToSAM
+    def instance[A](f: (CommandSource, Int) => CommandStep[A]): Targeter[A] = new Targeter[A] {
+      override def getTarget(source: CommandSource, pos: Int): CommandStep[A] = f(source, pos)
+    }
+
     implicit def entityTargeter[A <: Entity](implicit typeable: Typeable[A]): Targeter[A] = new Targeter[A] {
       private val EntityCase = TypeCase[A]
 
@@ -45,25 +51,28 @@ trait SpongeOrParameter {
       }
     }
 
-    implicit def blockHitTargeter: Targeter[BlockRayHit[World]] = (source: CommandSource, pos: Int) => {
-      entitySender[Entity].validate(source).flatMap { entity =>
-        val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
-
-        res.toRight(Command.usageError("Not looking at an block", pos))
+    implicit def blockHitTargeter: Targeter[BlockRayHit[World]] =
+      Targeter.instance { (source: CommandSource, pos: Int) =>
+        entitySender[Entity].validate(source).flatMap { entity =>
+          val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
+          res.toRight(Command.usageError("Not looking at an block", pos))
+        }
       }
-    }
 
-    implicit def locationTargeter: Targeter[Location[World]] = (source: CommandSource, pos: Int) => {
-      blockHitTargeter.getTarget(source, pos).map(_.getLocation)
-    }
+    implicit def locationTargeter: Targeter[Location[World]] =
+      Targeter.instance { (source: CommandSource, pos: Int) =>
+        blockHitTargeter.getTarget(source, pos).map(_.getLocation)
+      }
 
-    implicit def vector3iTargeter: Targeter[Vector3i] = (source: CommandSource, pos: Int) => {
-      blockHitTargeter.getTarget(source, pos).map(_.getBlockPosition)
-    }
+    implicit def vector3iTargeter: Targeter[Vector3i] =
+      Targeter.instance { (source: CommandSource, pos: Int) =>
+        blockHitTargeter.getTarget(source, pos).map(_.getBlockPosition)
+      }
 
-    implicit def vector3dTargeter: Targeter[Vector3d] = (source: CommandSource, pos: Int) => {
-      blockHitTargeter.getTarget(source, pos).map(_.getPosition)
-    }
+    implicit def vector3dTargeter: Targeter[Vector3d] =
+      Targeter.instance { (source: CommandSource, pos: Int) =>
+        blockHitTargeter.getTarget(source, pos).map(_.getPosition)
+      }
   }
 
   /**

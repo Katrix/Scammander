@@ -10,6 +10,7 @@ import org.spongepowered.api.world.{Locatable, Location, World}
 
 import com.flowpowered.math.vector.Vector3d
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.ScammanderBase
 import shapeless._
 

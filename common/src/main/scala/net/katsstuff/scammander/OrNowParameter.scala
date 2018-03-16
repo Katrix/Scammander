@@ -2,6 +2,8 @@ package net.katsstuff.scammander
 
 import java.time.LocalDateTime
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait OrNowParameter[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra]
     with OrParameters[RootSender, RunExtra, TabExtra]

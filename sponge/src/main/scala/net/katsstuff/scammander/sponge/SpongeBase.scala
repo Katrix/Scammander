@@ -31,6 +31,7 @@ import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
+import net.katsstuff.scammander.CrossCompatibility._
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {

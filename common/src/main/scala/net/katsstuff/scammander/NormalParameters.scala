@@ -27,6 +27,8 @@ import java.util.{Locale, UUID}
 
 import scala.util.Try
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait NormalParameters[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
 

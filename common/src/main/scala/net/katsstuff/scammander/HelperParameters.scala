@@ -22,6 +22,8 @@ package net.katsstuff.scammander
 
 import scala.annotation.tailrec
 
+import net.katsstuff.scammander.CrossCompatibility._
+
 trait HelperParameters[RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
 
@@ -31,8 +33,12 @@ trait HelperParameters[RootSender, RunExtra, TabExtra] {
     */
   case class OnlyOne[A](value: A)
   object OnlyOne {
+    //noinspection ConvertExpressionToSAM
     implicit def onlyOneValidator[A](implicit validator: UserValidator[A]): UserValidator[OnlyOne[A]] =
-      (sender: RootSender) => validator.validate(sender).map(OnlyOne.apply)
+      new UserValidator[OnlyOne[A]] {
+        override def validate(sender: RootSender): CommandStep[OnlyOne[A]] =
+          validator.validate(sender).map(OnlyOne.apply)
+      }
   }
 
   implicit def onlyOneParam[A](implicit setParam: Parameter[Set[A]]): Parameter[OnlyOne[A]] =
@@ -69,11 +75,10 @@ trait HelperParameters[RootSender, RunExtra, TabExtra] {
         source: RootSender,
         extra: RunExtra,
         xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], RemainingAsString)] = {
+    ): CommandStep[(List[RawCmdArg], RemainingAsString)] =
       if (xs.nonEmpty && xs.head.content.nonEmpty) {
         Right((Nil, RemainingAsString(xs.map(_.content).mkString(" "))))
       } else Left(ScammanderHelper.notEnoughArgs)
-    }
 
     override def suggestions(
         source: RootSender,

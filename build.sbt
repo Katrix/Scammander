@@ -1,6 +1,7 @@
 lazy val commonSettings = Seq(
   organization := "net.katsstuff",
   scalaVersion := "2.12.4",
+  crossScalaVersions := Seq("2.11.11", scalaVersion.value),
   scalacOptions ++= Seq(
     "-deprecation",
     "-feature",
@@ -50,16 +51,21 @@ lazy val common = project.settings(
   libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % Test
 )
 
-lazy val sponge7 = project
-  .settings(
-    commonSettings,
-    publishSettings,
-    name := "scammander-sponge7",
-    version := scammanderVersion,
-    resolvers += "Sponge" at "http://repo.spongepowered.org/maven",
-    libraryDependencies += "org.spongepowered" % "spongeapi" % "7.0.0"
-  )
-  .dependsOn(common)
+lazy val sponge =
+  crossProject(SpongePlatform("5.1.0"), SpongePlatform("6.0.0"), SpongePlatform("7.0.0"))
+    .crossType(CrossType.Pure)
+    .settings(
+      commonSettings,
+      publishSettings,
+      name := s"scammanderSponge",
+      moduleName := s"${name.value}_sponge${spongeApiVersion.value.dropRight(2)}",
+      version := scammanderVersion
+    )
+    .configure(_.dependsOn(common))
+
+lazy val sponge5 = sponge.spongeProject("5.1.0")
+lazy val sponge6 = sponge.spongeProject("6.0.0")
+lazy val sponge7 = sponge.spongeProject("7.0.0")
 
 lazy val bukkit = project
   .settings(
@@ -75,7 +81,7 @@ lazy val bukkit = project
 
 lazy val scammanderRoot = project
   .in(file("."))
-  .aggregate(common, sponge7, bukkit)
+  .aggregate(common, sponge5, sponge6, sponge7, bukkit)
   .settings(
     noPublishSettings,
     //Fixes repository not specified error
