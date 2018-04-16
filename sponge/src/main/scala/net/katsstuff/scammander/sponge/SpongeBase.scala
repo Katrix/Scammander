@@ -31,10 +31,18 @@ import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
-import net.katsstuff.scammander.CrossCompatibility._
+import cats.MonadError
+import cats.data.{NonEmptyList, StateT}
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
+import net.katsstuff.scammander
 
-trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
+trait SpongeBase
+    extends ScammanderBase[
+      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+      CommandSource,
+      Unit,
+      Location[World]
+    ] {
 
   override protected type Result                            = Int
   override protected type StaticChildCommand[Sender, Param] = SpongeCommandWrapper[Sender, Param]
@@ -44,6 +52,9 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
   //Helpers used when registering command
 
   override protected def tabExtraToRunExtra(extra: Location[World]): Unit = ()
+
+  override implicit def F: MonadError[CommandStep, NonEmptyList[CommandFailure]] =
+    cats.instances.either.catsStdInstancesForEither
 
   /**
     * Helper for creating an alias when registering a command.
@@ -117,27 +128,30 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
       } else {
         val res = for {
           sender <- command.userValidator.validate(source)
-          param  <- command.par.parse(source, (), args)
-          result <- command.run(sender, (), param._2)
+          param  <- command.par.parse(source, ()).runA(args)
+          result <- command.run(sender, (), param)
         } yield result
 
         res match {
           case Right(CommandSuccess(count)) => CommandResult.successCount(count)
-          case Left(CommandError(msg, true)) =>
+          case Left(NonEmptyList(CommandError(msg, true), Nil)) =>
             throw new CommandException(Text.of(msg).concat(Text.NEW_LINE).concat(getUsage(source)))
-          case Left(CommandError(msg, false)) => throw new CommandException(Text.of(msg))
-          case Left(CommandSyntaxError(msg, pos)) =>
+          case Left(NonEmptyList(CommandError(msg, false), Nil)) => throw new CommandException(Text.of(msg))
+          case Left(NonEmptyList(CommandSyntaxError(msg, pos), Nil)) =>
             val e =
               if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
               else new CommandException(Text.of(msg))
             throw e
-          case Left(CommandUsageError(msg, pos)) =>
+          case Left(NonEmptyList(CommandUsageError(msg, pos), Nil)) =>
             //TODO: Custom exception
             val e =
               if (pos != -1) new ArgumentParseException(Text.of(msg), arguments, pos)
               else new CommandException(Text.of(msg))
             throw e
-          case Left(e: MultipleCommandErrors) => throw new CommandException(Text.of(e.msg)) //TODO: Better error here
+          case Left(nel) =>
+            val usage = if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage(source)}" else ""
+            val msg   = s"${nel.map(_.msg).toList.mkString("\n")}$usage" //TODO: Better error here
+            throw new CommandException(Text.of(msg))
         }
       }
     }
@@ -147,10 +161,11 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
         arguments: String,
         targetPosition: Location[World]
     ): util.List[String] = {
-      val args                   = ScammanderHelper.stringToRawArgsQuoted(arguments)
-      lazy val content           = args.head.content
-      lazy val childCommand      = command.childrenMap(content)
       def headCount(arg: String) = command.children.flatMap(_.aliases).count(_.startsWith(arg))
+
+      val args              = ScammanderHelper.stringToRawArgsQuoted(arguments)
+      lazy val content      = args.head.content
+      lazy val childCommand = command.childrenMap(content)
       val doChildCommand = if (args.nonEmpty && command.childrenMap.contains(content)) {
         if (headCount(content) > 1) args.lengthCompare(1) > 0 else true
       } else false
@@ -158,21 +173,21 @@ trait SpongeBase extends ScammanderBase[CommandSource, Unit, Location[World]] {
       if (doChildCommand && childCommand.testPermission(source)) {
         childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
       } else {
-        val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = xs => {
-          val isParsed = xs.headOption.exists { arg =>
+        val parse: StateT[CommandStep, List[RawCmdArg], Boolean] = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
+          val isParsed =
             if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
             else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-          }
-          Either.cond(isParsed, (xs.drop(1), true), Command.error("Not child"))
+          if (isParsed) F.pure(true) else Command.errorF("Not child")
         }
-        val childSuggestions = ScammanderHelper.suggestions(parse, args, command.childrenMap.keys)
+        val childSuggestions =
+          ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args).map(_.getOrElse(Nil))
         val paramSuggestions = command.suggestions(source, targetPosition, args)
         val ret = childSuggestions match {
-          case Right(suggestions) => suggestions ++ paramSuggestions
+          case Right(suggestions) => F.map(paramSuggestions)(suggestions ++ _)
           case Left(_)            => paramSuggestions
         }
 
-        ret.asJava
+        ret.getOrElse(Nil).asJava
       }
     }
 

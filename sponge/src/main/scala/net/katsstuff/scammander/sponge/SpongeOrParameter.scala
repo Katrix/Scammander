@@ -4,19 +4,30 @@ import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.entity.Entity
 import org.spongepowered.api.util.blockray.{BlockRay, BlockRayHit}
 import org.spongepowered.api.world.{Location, World}
-
 import scala.collection.JavaConverters._
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
-import net.katsstuff.scammander.CrossCompatibility._
-import net.katsstuff.scammander.{OrParameters, ScammanderBase}
+import cats.data.{NonEmptyList, StateT}
+import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
+import net.katsstuff.scammander
 import shapeless._
 
 trait SpongeOrParameter {
-  self: ScammanderBase[CommandSource, Unit, Location[World]]
-    with OrParameters[CommandSource, Unit, Location[World]]
+  self: ScammanderBase[
+    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+    CommandSource,
+    Unit,
+    Location[World]
+  ] with OrParameters[
+      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+      CommandSource,
+      Unit,
+      Location[World]
+    ]
     with SpongeValidators =>
+
+  type CommandStep[A] = Either[NonEmptyList[CommandFailure], A]
 
   /**
     * A typeclass which returns what the sender is currently targeting.
@@ -46,7 +57,7 @@ trait SpongeOrParameter {
               case EntityCase(e) => e
             }
 
-          target.toRight(Command.usageError("Not looking at an entity", pos))
+          target.toRight(Command.usageErrorNel("Not looking at an entity", pos))
         }
       }
     }
@@ -55,7 +66,7 @@ trait SpongeOrParameter {
       Targeter.instance { (source: CommandSource, pos: Int) =>
         entitySender[Entity].validate(source).flatMap { entity =>
           val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
-          res.toRight(Command.usageError("Not looking at an block", pos))
+          res.toRight(Command.usageErrorNel("Not looking at an block", pos))
         }
       }
 
@@ -86,20 +97,18 @@ trait SpongeOrParameter {
   ): Parameter[OrTarget[Base]] = new ProxyParameter[OrTarget[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse(
-        source: CommandSource,
-        extra: Unit,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], OrTarget[Base])] = {
-      val ret = for {
-        e1 <- parameter.parse(source, extra, xs).left
-        e2 <- targeter.getTarget(source, xs.headOption.map(_.start).getOrElse(-1)).map(xs -> _).left
-      } yield e1.merge(e2)
+    override def parse(source: CommandSource, extra: Unit): StateT[CommandStep, List[RawCmdArg], OrTarget[Base]] =
+      for {
+        pos <- ScammanderHelper.getPos
+        res <- ScammanderHelper.withFallback(
+          parameter.parse(source, extra),
+          StateT.liftF[CommandStep, List[RawCmdArg], Base](targeter.getTarget(source, pos))
+        )
+      } yield Or(res)
 
-      ret.map(t => t._1 -> Or(t._2))
+    override def usage(source: CommandSource): CommandStep[String] = {
+      import cats.syntax.either._
+      targeter.getTarget(source, -1).map(_ => s"[$name]").orElse(super.usage(source))
     }
-
-    override def usage(source: CommandSource): String =
-      targeter.getTarget(source, -1).map(_ => s"[$name]").getOrElse(super.usage(source))
   }
 }

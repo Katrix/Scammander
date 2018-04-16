@@ -154,7 +154,7 @@ trait BukkitParameters {
                   doubleParam
                     .parse(source, extra)
                     .contramap[List[RawCmdArg]](
-                      xs => xs.headOption.fold(xs)(head => head.copy(content = head.content.drop(1)) :: xs.tail)
+                      xs => xs.headOption.fold(xs)(head => head.copy(content = newArg) :: xs.tail)
                     )
                     .map(_ + relativeTo)
                 }

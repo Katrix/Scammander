@@ -7,12 +7,16 @@ import org.spongepowered.api.text.action.TextActions
 import org.spongepowered.api.text.format.TextColors._
 import org.spongepowered.api.text.format.TextStyles._
 import org.spongepowered.api.world.{Location, World}
-import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters, ScammanderBase}
 
-trait SpongeHelpCommands extends HelpCommands[CommandSource, Unit, Location[World]] {
-  self: ScammanderBase[CommandSource, Unit, Location[World]]
-    with NormalParameters[CommandSource, Unit, Location[World]]
-    with HelperParameters[CommandSource, Unit, Location[World]]
+import cats.data.NonEmptyList
+import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters, ScammanderBase}
+import net.katsstuff.scammander
+
+trait SpongeHelpCommands
+    extends HelpCommands[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]] {
+  self: ScammanderBase[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
+    with NormalParameters[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
+    with HelperParameters[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
     with SpongeBase =>
 
   override type Title = Text
@@ -48,12 +52,12 @@ trait SpongeHelpCommands extends HelpCommands[CommandSource, Unit, Location[Worl
     Command.successF()
   }
 
-  override def sendCommandHelp(
-      title: Text,
+
+
+  override def sendCommandHelp(title: Text,
       source: CommandSource,
       command: StaticChildCommand[_, _],
-      path: List[String]
-  ): CommandStep[CommandSuccess] = {
+      path: List[String]): CommandStep[CommandSuccess] = {
     if (command.testPermission(source)) {
       val commandName = path.mkString("/", " ", "")
       val pages       = PaginationList.builder()
@@ -76,15 +80,20 @@ trait SpongeHelpCommands extends HelpCommands[CommandSource, Unit, Location[Worl
   ): Seq[Text] = {
     val usage = command.getUsage(source)
 
-    val helpBuilder = Text.builder().append(Text.of(GREEN, UNDERLINE, commandName, " ", usage)).onClick(TextActions
-      .suggestCommand(fullCommandName))
+    val helpBuilder = Text
+      .builder()
+      .append(Text.of(GREEN, UNDERLINE, commandName, " ", usage))
+      .onClick(
+        TextActions
+          .suggestCommand(fullCommandName)
+      )
 
     val commandHelp        = command.info.help(source)
     val commandDescription = command.info.shortDescription(source)
 
     commandDescription.foreach(desc => helpBuilder.onHover(TextActions.showText(desc)))
 
-    val hoverOpt = if(detail) commandHelp.orElse(commandDescription) else commandDescription
+    val hoverOpt = if (detail) commandHelp.orElse(commandDescription) else commandDescription
     hoverOpt.foreach(text => helpBuilder.append(Text.of(" - ", text)))
 
     val children = command.command.children.toSeq.sortBy(_.aliases.head)

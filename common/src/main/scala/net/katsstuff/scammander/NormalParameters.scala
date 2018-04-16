@@ -28,7 +28,7 @@ import java.util.{Locale, UUID}
 import scala.language.higherKinds
 import scala.util.Try
 
-import cats.data.{NonEmptyList, StateT}
+import cats.data.StateT
 
 trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
