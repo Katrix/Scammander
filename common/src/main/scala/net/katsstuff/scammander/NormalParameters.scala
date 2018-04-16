@@ -43,7 +43,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           res <- StateT.liftF(
             F.fromEither(
               Try(s(arg.content)).toEither.left
-                .map(_ => NonEmptyList.one(Command.syntaxError(s"${arg.content} is not a valid $name", arg.start)))
+                .map(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
             )
           )
         } yield res
@@ -94,7 +94,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
               }
               .toEither
               .left
-              .map(e => NonEmptyList.one(CommandSyntaxError(e.getMessage, arg.start)))
+              .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
           )
         )
       } yield res
@@ -126,7 +126,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
               }
               .toEither
               .left
-              .map(_ => NonEmptyList.one(Command.syntaxError("Invalid date-time!", arg.start)))
+              .map(_ => Command.syntaxErrorNel("Invalid date-time!", arg.start))
           )
         )
       } yield res
@@ -162,7 +162,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           StateT.liftF[F, List[RawCmdArg], Duration](
             F.fromEither(
               Try(Duration.parse(usedS)).toEither.left
-                .map(e => NonEmptyList.one(Command.syntaxError(e.getMessage, arg.start)))
+                .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
             )
           )
         }

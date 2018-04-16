@@ -16,7 +16,12 @@ import shapeless.Witness
 trait BukkitParameters {
   self: ScammanderBase[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra]
     with NormalParameters[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra]
-    with HelperParameters[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] =>
+    with HelperParameters[
+      Either[NonEmptyList[scammander.CommandFailure], ?],
+      CommandSender,
+      BukkitExtra,
+      BukkitExtra
+    ] =>
 
   implicit val playerHasName:        HasName[Player]        = HasName.instance((a: Player) => a.getName)
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = HasName.instance((a: OfflinePlayer) => a.getName)
@@ -46,9 +51,7 @@ trait BukkitParameters {
         if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
         else
           ScammanderHelper.getPos.flatMapF { pos =>
-            F.raiseError(
-              NonEmptyList.one(Command.usageError("You do not have the permissions needed to use this parameter", pos))
-            )
+            Command.usageErrorF("You do not have the permissions needed to use this parameter", pos)
           }
 
       override def suggestions(
@@ -103,7 +106,10 @@ trait BukkitParameters {
   implicit val vector3dParam: Parameter[BukkitVector] = new Parameter[BukkitVector] {
     override def name: String = "vector3d"
 
-    override def parse(source: CommandSender, extra: BukkitExtra): StateT[CommandStep, List[RawCmdArg], BukkitVector] = {
+    override def parse(
+        source: CommandSender,
+        extra: BukkitExtra
+    ): StateT[CommandStep, List[RawCmdArg], BukkitVector] = {
       val relative = source match {
         case entity: Entity                  => Some(entity.getLocation)
         case blockSender: BlockCommandSender => Some(blockSender.getBlock.getLocation)
@@ -138,9 +144,7 @@ trait BukkitParameters {
             StateT
               .liftF[CommandStep, List[RawCmdArg], Double](
                 relativeToOpt.toRight(
-                  NonEmptyList.one(
-                    Command.usageError("Relative position specified but source does not have a position", arg.start)
-                  )
+                  Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )
               )
               .flatMap { relativeTo =>

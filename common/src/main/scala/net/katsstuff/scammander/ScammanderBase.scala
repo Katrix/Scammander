@@ -174,20 +174,38 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Creates a generic command error step.
       */
-    def errorF[A](msg: String): F[A] =
-      F.raiseError(NonEmptyList.one(CommandError(msg)))
+    def errorF[A](msg: String, shouldShowUsage: Boolean = false): F[A] =
+      F.raiseError(errorNel(msg, shouldShowUsage))
 
     /**
       * Creates a syntax command error step.
       */
     def syntaxErrorF[A](msg: String, pos: Int): F[A] =
-      F.raiseError(NonEmptyList.one(CommandSyntaxError(msg, pos)))
+      F.raiseError(syntaxErrorNel(msg, pos))
 
     /**
       * Creates a usage  command error step.
       */
     def usageErrorF[A](msg: String, pos: Int): F[A] =
-      F.raiseError(NonEmptyList.one(CommandUsageError(msg, pos)))
+      F.raiseError(usageErrorNel(msg, pos))
+
+    /**
+      * Creates a generic command error NEL.
+      */
+    def errorNel[A](msg: String, shouldShowUsage: Boolean = false): NonEmptyList[CommandFailure] =
+      NonEmptyList.one(error(msg, shouldShowUsage))
+
+    /**
+      * Creates a syntax command error NEL.
+      */
+    def syntaxErrorNel[A](msg: String, pos: Int): NonEmptyList[CommandSyntaxError] =
+      NonEmptyList.one(syntaxError(msg, pos))
+
+    /**
+      * Creates a usage  command error NEL.
+      */
+    def usageErrorNel[A](msg: String, pos: Int): NonEmptyList[CommandUsageError] =
+      NonEmptyList.one(usageError(msg, pos))
 
     /**
       * Creates a command success.
@@ -197,7 +215,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Creates a generic command error.
       */
-    def error(msg: String): CommandFailure = CommandError(msg)
+    def error(msg: String, shouldShowUsage: Boolean = false): CommandFailure = CommandError(msg, shouldShowUsage)
 
     /**
       * Creates a syntax command error.
@@ -246,7 +264,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   implicit class OptionOps[A](val option: Option[A]) {
     def toF(error: => String): F[A] =
-      option.fold[F[A]](F.raiseError(NonEmptyList.one(CommandError(error))))(F.pure)
+      option.fold[F[A]](Command.errorF(error))(F.pure)
   }
 
   /**
@@ -284,11 +302,11 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
         val parse = for {
           arg <- ScammanderHelper.firstArgOpt
-          _    <- ScammanderHelper.dropFirstArg
+          _   <- ScammanderHelper.dropFirstArg
           res <- {
             val res = arg.exists(head => choices.exists(obj => HasName(obj).equalsIgnoreCase(head.content)))
             if (res) StateT.pure[F, List[RawCmdArg], Boolean](true)
-            else StateT.liftF[F, List[RawCmdArg], Boolean](F.raiseError(NonEmptyList.one(Command.error("Not parsed"))))
+            else StateT.liftF[F, List[RawCmdArg], Boolean](Command.errorF("Not parsed"))
           }
         } yield res
 

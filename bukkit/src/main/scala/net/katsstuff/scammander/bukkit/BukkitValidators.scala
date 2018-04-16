@@ -17,12 +17,12 @@ trait BukkitValidators {
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player => Right(player)
-    case _              => Left(NonEmptyList.one(Command.usageError("This command can only be used by players", -1)))
+    case _              => Command.usageErrorF("This command can only be used by players", -1)
   }
 
   implicit val offlinePlayerSender: UserValidator[OfflinePlayer] = UserValidator.mkValidator {
     case player: OfflinePlayer => Right(player)
-    case _                     => Left(NonEmptyList.one(Command.usageError("This command can only be used by players", -1)))
+    case _                     => Command.usageErrorF("This command can only be used by players", -1)
   }
 
   implicit def entitySender[A <: Entity: Typeable]: UserValidator[A] = {
@@ -31,7 +31,7 @@ trait BukkitValidators {
     UserValidator.mkValidator {
       case EntityCase(entity)          => Right(entity)
       case proxy: ProxiedCommandSender => entitySender.validate(proxy.getCaller)
-      case _                           => Left(NonEmptyList.one(Command.usageError("This command can only be used by players", -1)))
+      case _                           => Command.usageErrorF("This command can only be used by players", -1)
     }
   }
 
@@ -39,8 +39,7 @@ trait BukkitValidators {
     case entity: Entity                  => Right(entity.getLocation)
     case blockSender: BlockCommandSender => Right(blockSender.getBlock.getLocation)
     case proxy: ProxiedCommandSender     => locationSender.validate(proxy.getCaller)
-    case _ =>
-      Left(NonEmptyList.one(Command.usageError("This command can only be used by things which have a location", -1)))
+    case _                               => Command.usageErrorF("This command can only be used by things which have a location", -1)
   }
 
   implicit val vector3dSender: UserValidator[BukkitVector] =
@@ -49,6 +48,6 @@ trait BukkitValidators {
   implicit val ipSender: UserValidator[InetAddress] = UserValidator.mkValidator {
     case player: Player              => Right(player.getAddress.getAddress)
     case proxy: ProxiedCommandSender => ipSender.validate(proxy.getCaller)
-    case _                           => Left(NonEmptyList.one(Command.usageError("This command can only be used by things which have an IP", -1)))
+    case _                           => Command.usageErrorF("This command can only be used by things which have an IP", -1)
   }
 }

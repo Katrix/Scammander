@@ -69,7 +69,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
           .flatMapF[Boolean] { xs =>
             val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
             if (idx != -1) F.pure(true)
-            else F.raiseError(NonEmptyList.one(Command.error("Not a flag")))
+            else Command.errorF("Not a flag")
           }
           .modify(_.tail)
 
@@ -121,7 +121,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
           .flatMapF[Boolean] { xs =>
             val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
             if (idx != -1) F.pure(true)
-            else F.raiseError(NonEmptyList.one(Command.error("Not a flag")))
+            else Command.errorF("Not a flag")
           }
           .modify(_.tail)
 
