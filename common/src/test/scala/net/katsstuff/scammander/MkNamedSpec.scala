@@ -26,7 +26,7 @@ class MkNamedSpec extends ScammanderSpec {
   }
 
   test("MkNamed should have a good error message") {
-    error[OnlyOne[MyObj]]("") should equal(Command.syntaxError("Not enough arguments", -1))
-    error[OnlyOne[MyObj]]("bin") should equal(Command.usageError("bin is not a valid myobj", 0))
+    singleError[OnlyOne[MyObj]]("") should equal(Command.syntaxError("Not enough arguments", -1))
+    singleError[OnlyOne[MyObj]]("bin") should equal(Command.usageError("bin is not a valid myobj", 0))
   }
 }

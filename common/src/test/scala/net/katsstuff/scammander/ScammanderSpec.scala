@@ -2,15 +2,24 @@ package net.katsstuff.scammander
 
 import org.scalatest.{Assertion, FunSuite, Matchers}
 
-import RawCmdArg
+import cats.MonadError
+import cats.data.NonEmptyList
 
-class ScammanderSpec extends FunSuite with Matchers with ScammanderBase[Unit, Unit, Unit] {
+class ScammanderSpec
+    extends FunSuite
+    with Matchers
+    with ScammanderBaseAll[Either[NonEmptyList[CommandFailure], ?], Unit, Unit, Unit] {
 
   override protected type Result             = Unit
-  override protected type StaticChildCommand = Unit
+  protected type StaticChildCommand[Sender, Param] = DummyStaticChildCommand[Sender, Param]
+  case class DummyStaticChildCommand[Sender, Param](command: Command[Sender, Param]) extends SharedStaticChildCommand[Sender, Param]
+
   override protected val defaultCommandSuccess: Unit = ()
 
   override protected def tabExtraToRunExtra(extra: Unit): Unit = ()
+
+  override implicit def F: MonadError[Either[NonEmptyList[CommandFailure], ?], NonEmptyList[CommandFailure]] =
+    cats.instances.either.catsStdInstancesForEither
 
   case class MyObj(name: String, i: Int)
 
@@ -25,7 +34,7 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderBase[Unit, Un
   def mkArgs(arguments: String): List[RawCmdArg] = ScammanderHelper.stringToRawArgsQuoted(arguments)
 
   def parse[A](arguments: String, checkEmpty: Boolean = true)(implicit param: Parameter[A]): Option[A] = {
-    val parsed = param.parse((), (), mkArgs(arguments))
+    val parsed = param.parse((), ()).run(mkArgs(arguments))
     if (checkEmpty && arguments.nonEmpty) {
       parsed.foreach {
         case (xs, _) =>
@@ -36,23 +45,32 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderBase[Unit, Un
     parsed.map(_._2).toOption
   }
 
-  def error[A](arguments: String)(implicit param: Parameter[A]): CommandFailure = {
-    val parsed = param.parse((), (), mkArgs(arguments))
+  def error[A](arguments: String)(implicit param: Parameter[A]): NonEmptyList[CommandFailure] = {
+    val parsed = param.parse((), ()).run(mkArgs(arguments))
     assert(parsed.isLeft)
     parsed.left.get
   }
 
-  def usage[A](implicit param: Parameter[A]): String = param.usage(())
+  def singleError[A](arguments: String)(implicit param: Parameter[A]): CommandFailure = {
+    val nel = error[A](arguments)
+    assert(nel.size == 1)
+    nel.head
+  }
+
+  def usage[A](implicit param: Parameter[A]): String = {
+    val e = param.usage(())
+    assert(e.isRight)
+    e.right.get
+  }
 
   def suggestions[A](arguments: String)(implicit param: Parameter[A]): Seq[String] = {
-    val either = param.suggestions((), (), mkArgs(arguments))
+    val either = param.suggestions((), ()).run(mkArgs(arguments))
     assert(either.isRight)
-    either.right.get
+    either.right.get._2.getOrElse(Nil)
   }
 
   def noSuggestions[A](arguments: String)(implicit param: Parameter[A]): Assertion = {
-    val either = param.suggestions((), (), mkArgs(arguments))
+    val either = param.suggestions((), ()).run(mkArgs(arguments)).map(_._2.getOrElse(Nil))
     assert(either.isLeft || either.contains(Nil))
   }
-
 }

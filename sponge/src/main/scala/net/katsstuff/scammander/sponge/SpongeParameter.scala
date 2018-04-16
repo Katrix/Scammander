@@ -71,7 +71,7 @@ trait SpongeParameter {
           source: CommandSource,
           extra: Location[World],
           xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] =
+      ): EitherT[F, List[RawCmdArg], Seq[String]] =
         if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else Left(xs.drop(1))
     }
 
@@ -110,7 +110,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = {
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = {
       if (xs.nonEmpty) {
         val head = xs.head
         val choices =
@@ -158,7 +158,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] =
+    ): EitherT[F, List[RawCmdArg], Seq[String]] =
       if (xs.nonEmpty) {
         ScammanderHelper.suggestions(parse(source, (), _), xs, Selector.complete(xs.head.content).asScala)
       } else Left(Nil)
@@ -197,7 +197,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] =
+    ): EitherT[F, List[RawCmdArg], Seq[String]] =
       ScammanderHelper.suggestions(parse(source, (), _), xs, userStorage.getAll.asScala.collect {
         case profile if profile.getName.isPresent => profile.getName.get()
       })
@@ -229,7 +229,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(3))
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = Left(xs.drop(3))
 
     private def parseRelativeDouble(
         source: CommandSource,
@@ -294,7 +294,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = {
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = {
       xs.headOption
         .collect {
           case RawCmdArg(_, _, arg) if arg.startsWith("@") =>
@@ -349,7 +349,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(1))
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = Left(xs.drop(1))
   }
 
   implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
@@ -379,7 +379,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World],
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(1))
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = Left(xs.drop(1))
   }
 
   //TODO: text

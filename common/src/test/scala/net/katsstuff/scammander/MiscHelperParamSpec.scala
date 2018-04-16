@@ -1,5 +1,7 @@
 package net.katsstuff.scammander
 
+import cats.data.NonEmptyList
+
 class MiscHelperParamSpec extends ScammanderSpec {
 
   implicit val sourceAsDouble: UserValidator[Double] = UserValidator.mkValidator(_ => Right(0D))
@@ -24,8 +26,8 @@ class MiscHelperParamSpec extends ScammanderSpec {
   }
 
   test("One or more should parse as many as possible") {
-    parse[OneOrMore[Int]]("5 4 3") should contain(OneOrMore(Seq(5, 4, 3)))
-    parse[OneOrMore[Int]]("1") should contain(OneOrMore(Seq(1)))
+    parse[OneOrMore[Int]]("5 4 3") should contain(OneOrMore(NonEmptyList.of(5, 4, 3)))
+    parse[OneOrMore[Int]]("1") should contain(OneOrMore(NonEmptyList.of(1)))
     parse[OneOrMore[Int]]("") should equal(None)
   }
 

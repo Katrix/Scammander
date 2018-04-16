@@ -9,8 +9,10 @@ lazy val commonSettings = Seq(
     "-Xlint",
     "-Yno-adapted-args",
     "-Ywarn-dead-code",
-    "-Ywarn-unused-import"
+    "-Ywarn-unused-import",
+    "-Ypartial-unification"
   ),
+  addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6"),
   //Fixes repository not specified error
   publishTo := {
     val nexus = "https://oss.sonatype.org/"
@@ -48,6 +50,7 @@ lazy val common = project.settings(
   name := "scammander",
   version := scammanderVersion,
   libraryDependencies += "com.chuusai"   %% "shapeless" % "2.3.3",
+  libraryDependencies += "org.typelevel" %% "cats-core" % "1.1.0",
   libraryDependencies += "org.scalatest" %% "scalatest" % "3.0.4" % Test
 )
 

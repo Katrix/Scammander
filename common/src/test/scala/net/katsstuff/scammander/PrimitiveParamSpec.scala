@@ -23,14 +23,14 @@ class PrimitiveParamSpec extends ScammanderSpec {
   }
 
   test("Number parameters should have a good error message") {
-    error[Byte]("foo").msg should equal("foo is not a valid byte")
-    error[Short]("foo").msg should equal("foo is not a valid short")
-    error[Int]("foo").msg should equal("foo is not a valid int")
-    error[Long]("foo").msg should equal("foo is not a valid long")
-    error[Float]("foo").msg should equal("foo is not a valid float")
-    error[Double]("foo").msg should equal("foo is not a valid double")
-    error[BigInt]("foo").msg should equal("foo is not a valid integer number")
-    error[BigDecimal]("foo").msg should equal("foo is not a valid decimal number")
-    error[UUID]("foo").msg should equal("foo is not a valid uuid")
+    singleError[Byte]("foo").msg should equal("foo is not a valid byte")
+    singleError[Short]("foo").msg should equal("foo is not a valid short")
+    singleError[Int]("foo").msg should equal("foo is not a valid int")
+    singleError[Long]("foo").msg should equal("foo is not a valid long")
+    singleError[Float]("foo").msg should equal("foo is not a valid float")
+    singleError[Double]("foo").msg should equal("foo is not a valid double")
+    singleError[BigInt]("foo").msg should equal("foo is not a valid integer number")
+    singleError[BigDecimal]("foo").msg should equal("foo is not a valid decimal number")
+    singleError[UUID]("foo").msg should equal("foo is not a valid uuid")
   }
 }

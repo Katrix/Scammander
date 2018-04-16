@@ -20,14 +20,13 @@
  */
 package net.katsstuff.scammander
 
-import scala.annotation.tailrec
+import scala.language.higherKinds
 
+import cats.data.{NonEmptyList, StateT}
 import shapeless.Witness
 
-import net.katsstuff.scammander.CrossCompatibility._
-
-trait FlagParameters[RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
+trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
+  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
 
   /**
     * Parses a flag with a value followed by it.
@@ -44,53 +43,56 @@ trait FlagParameters[RootSender, RunExtra, TabExtra] {
       private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
       override def name: String = s"$flagName ${flagParam.name}"
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], ValueFlag[Name, A])] = {
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], ValueFlag[Name, A]] = {
 
-        @tailrec
-        def inner(ys: List[RawCmdArg], acc: List[RawCmdArg]): CommandStep[(List[RawCmdArg], ValueFlag[Name, A])] = {
-          if (ys.nonEmpty) {
-            val h = ys.head
-            if (h.content == flagName) {
-              flagParam.parse(source, extra, ys.tail).map(t => (acc reverse_::: t._1, ValueFlag(Some(t._2))))
-            } else inner(ys.tail, h :: acc)
-          } else Right((acc.reverse, ValueFlag(None)))
+        ScammanderHelper.getArgs[F].flatMap { xs =>
+          val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
+          if (idx == -1) StateT.pure(ValueFlag(None))
+          else {
+            val before = xs.take(idx)
+            flagParam
+              .parse(source, extra)
+              .contramap[List[RawCmdArg]](_.drop(idx + 1))
+              .modify(ys => before ::: ys)
+              .map(a => ValueFlag(Some(a)))
+          }
         }
-
-        inner(xs, Nil)
       }
 
       override def suggestions(
           source: RootSender,
           extra: TabExtra,
-          xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] = {
+      ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
 
-        val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
-          val res = args.headOption.exists(arg => flagName.equalsIgnoreCase(arg.content))
-          if (res) Right(xs.tail -> true) else Left(Command.error("Not a flag"))
-        }
+        val parse1 = ScammanderHelper
+          .getArgs[F]
+          .flatMapF[Boolean] { xs =>
+            val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
+            if (idx != -1) F.pure(true)
+            else F.raiseError(NonEmptyList.one(Command.error("Not a flag")))
+          }
+          .modify(_.tail)
 
-        @tailrec
-        def inner(xs: List[RawCmdArg], acc: List[RawCmdArg]): Either[List[RawCmdArg], Seq[String]] = {
-          if (xs.isEmpty) Left(acc.reverse)
-          else if (xs.head.content.startsWith("-")) {
-            ScammanderHelper.suggestions(parse, xs, Seq(flagName)) match {
-              case Right(suggestions) => Right(suggestions)
-              case Left(_) if xs.headOption.map(_.content).exists(_.equalsIgnoreCase(flagName)) =>
-                flagParam.suggestions(source, extra, xs.tail)
-              case Left(_) => inner(xs.tail, xs.head :: acc)
+        ScammanderHelper.getArgs[F].flatMap { xs =>
+          if (xs.isEmpty || xs.head.content.isEmpty) StateT.pure(Some(Seq(flagName)))
+          else {
+            val idx = xs.indexWhere(_.content.startsWith("-"))
+            if (idx == -1) StateT.pure(None)
+            else {
+              val before = xs.take(idx)
+              ScammanderHelper
+                .suggestions(parse1, Seq(flagName))
+                .contramap[List[RawCmdArg]](_.drop(idx + 1))
+                .modify(ys => before ::: ys)
+                .flatMap(
+                  suggestions => suggestions.fold(flagParam.suggestions(source, extra))(seq => StateT.pure(Some(seq)))
+                )
             }
-          } else Left(xs)
+          }
         }
-
-        if (xs.isEmpty || xs.head.content.isEmpty) Right(Seq(flagName)) else inner(xs, Nil)
       }
 
-      override def usage(source: RootSender): String = s"$flagName ${flagParam.usage(source)}"
+      override def usage(source: RootSender): F[String] = F.map(flagParam.usage(source))(fUsage => s"$flagName $fUsage")
     }
 
   /**
@@ -104,50 +106,42 @@ trait FlagParameters[RootSender, RunExtra, TabExtra] {
       private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
       override def name: String = flagName
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], BooleanFlag[Name])] = {
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], BooleanFlag[Name]] = {
 
-        @tailrec
-        def inner(ys: List[RawCmdArg], acc: List[RawCmdArg]): CommandStep[(List[RawCmdArg], BooleanFlag[Name])] = {
-          if (ys.nonEmpty) {
-            val h = ys.head
-            if (h.content == flagName) {
-              Right((acc reverse_::: ys.tail, BooleanFlag(true)))
-            } else inner(ys.tail, h :: acc)
-          } else Right((acc.reverse, BooleanFlag(false)))
+        ScammanderHelper.getArgs[F].transform { (xs, _) =>
+          val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
+          if (idx == -1) (xs, BooleanFlag(false))
+          else (xs.patch(idx, Nil, 1), BooleanFlag(true))
         }
-
-        inner(xs, Nil)
       }
 
-      override def suggestions(
-          source: RootSender,
-          extra: TabExtra,
-          xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] = {
-        val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
-          val res = args.headOption.exists(arg => flagName.equalsIgnoreCase(arg.content))
-          if (res) Right(xs.tail -> true) else Left(Command.error("Not a flag"))
-        }
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+        val parse = ScammanderHelper
+          .getArgs[F]
+          .flatMapF[Boolean] { xs =>
+            val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
+            if (idx != -1) F.pure(true)
+            else F.raiseError(NonEmptyList.one(Command.error("Not a flag")))
+          }
+          .modify(_.tail)
 
-        @tailrec
-        def inner(xs: List[RawCmdArg], acc: List[RawCmdArg]): Either[List[RawCmdArg], Seq[String]] = {
-          if (xs.isEmpty) Left(acc.reverse)
-          else if (xs.head.content.startsWith("-")) {
-            ScammanderHelper.suggestions(parse, xs, Seq(flagName)) match {
-              case Right(suggestions) => Right(suggestions)
-              case Left(_)            => inner(xs.tail, xs.head :: acc)
+        ScammanderHelper.getArgs[F].flatMap { xs =>
+          if (xs.isEmpty || xs.head.content.isEmpty) StateT.pure(Some(Seq(flagName)))
+          else {
+            val idx = xs.indexWhere(_.content.startsWith("-"))
+            if (idx == -1) StateT.pure(None)
+            else {
+              val before = xs.take(idx)
+              ScammanderHelper
+                .suggestions(parse, Seq(flagName))
+                .contramap[List[RawCmdArg]](_.drop(idx + 1))
+                .modify(ys => before ::: ys)
             }
-          } else Left(xs)
+          }
         }
-
-        if (xs.isEmpty || xs.head.content.isEmpty) Right(Seq(flagName)) else inner(xs, Nil)
       }
 
-      override def usage(source: RootSender): String = flagName
+      override def usage(source: RootSender): F[String] = F.pure(flagName)
     }
 
   /**
@@ -164,28 +158,24 @@ trait FlagParameters[RootSender, RunExtra, TabExtra] {
   ): Parameter[Flags[A, B]] = new Parameter[Flags[A, B]] {
     override def name: String = s"${paramParam.name} ${flagsParam.name}"
 
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], Flags[A, B])] = {
+    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Flags[A, B]] = {
       for {
-        t1 <- flagsParam.parse(source, extra, xs)
-        t2 <- paramParam.parse(source, extra, t1._1)
-      } yield t2._1 -> Flags(t1._2, t2._2)
+        t1 <- flagsParam.parse(source, extra)
+        t2 <- paramParam.parse(source, extra)
+      } yield Flags(t1, t2)
     }
 
-    override def suggestions(
-        source: RootSender,
-        extra: TabExtra,
-        xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = {
-      val flagSuggestions  = flagsParam.suggestions(source, extra, xs)
-
-      flagSuggestions match {
-        case Left(ys)           => paramParam.suggestions(source, extra, ys)
-        case Right(suggestions) => Right(suggestions ++ paramParam.suggestions(source, extra, xs).getOrElse(Nil))
-      }
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+      for {
+        flagSuggestions  <- flagsParam.suggestions(source, extra)
+        paramSuggestions <- paramParam.suggestions(source, extra)
+      } yield
+        (flagSuggestions, paramSuggestions) match {
+          case (Some(flag), Some(param)) => Some(flag ++ param)
+          case (Some(flag), None)        => Some(flag)
+          case (None, Some(param))       => Some(param)
+          case (None, None)              => None
+        }
     }
   }
 }

@@ -6,7 +6,7 @@ import shapeless._
 class FlagsParamSpec extends ScammanderSpec {
 
   case class MyArg3(foo: Int, bar: String, baz: Double)
-  implicit val myParam3: Parameter[MyArg3] = Parameter.deriver[MyArg3].derive
+  implicit val myParam3: Parameter[MyArg3] = ParameterDeriver[MyArg3].derive
 
   test("Value flags should parse values wherever they are") {
     def testArgs(args: String, checkEmpty: Boolean = true) =

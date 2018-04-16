@@ -45,7 +45,7 @@ trait SpongeHelpCommands extends HelpCommands[CommandSource, Unit, Location[Worl
     pages.contents(helpTexts: _*)
     pages.sendTo(source)
 
-    Command.successStep()
+    Command.successF()
   }
 
   override def sendCommandHelp(
@@ -61,8 +61,8 @@ trait SpongeHelpCommands extends HelpCommands[CommandSource, Unit, Location[Worl
       pages.contents(createCommandHelp(source, commandName, commandName, command, detail = true): _*)
       pages.sendTo(source)
 
-      Command.successStep()
-    } else Command.errorStep("You don't have the permission to see the help for this command")
+      Command.successF()
+    } else Command.errorF("You don't have the permission to see the help for this command")
   }
 
   def createCommandHelp(

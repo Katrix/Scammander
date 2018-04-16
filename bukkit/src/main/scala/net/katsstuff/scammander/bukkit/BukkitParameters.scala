@@ -54,7 +54,7 @@ trait BukkitParameters {
           source: CommandSender,
           extra: BukkitExtra,
           xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] =
+      ): EitherT[F, List[RawCmdArg], Seq[String]] =
         if (source.hasPermission(perm)) super.suggestions(source, extra, xs) else Left(xs.drop(1))
     }
 
@@ -93,7 +93,7 @@ trait BukkitParameters {
         source: CommandSender,
         extra: BukkitExtra,
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = {
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = {
       val parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], Boolean)] = args => {
         val res = args.headOption.exists { head =>
           Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(head.content))
@@ -132,7 +132,7 @@ trait BukkitParameters {
         source: CommandSender,
         extra: BukkitExtra,
         xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = Left(xs.drop(3))
+    ): EitherT[F, List[RawCmdArg], Seq[String]] = Left(xs.drop(3))
 
     private def parseRelativeDouble(
         source: CommandSender,

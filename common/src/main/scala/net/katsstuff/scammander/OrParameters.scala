@@ -20,10 +20,12 @@
  */
 package net.katsstuff.scammander
 
-import net.katsstuff.scammander.CrossCompatibility._
+import scala.language.higherKinds
 
-trait OrParameters[RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
+import cats.data.StateT
+
+trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
+  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
 
   /**
     * A class which can parse a normal parameter, or can optionally be filled
@@ -49,20 +51,24 @@ trait OrParameters[RootSender, RunExtra, TabExtra] {
     new ProxyParameter[OrSource[Base], Base] {
       override def param: Parameter[Base] = parameter
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], OrSource[Base])] = {
-        val res = for {
-          e1 <- param.parse(source, extra, xs).left
-          e2 <- validator.validate(source).map(xs -> _).left
-        } yield e1.merge(e2)
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], OrSource[Base]] =
+        for {
+          xs <- ScammanderHelper.getArgs[F]
+          res <- {
+            val fa1      = param.parse(source, extra).run(xs)
+            lazy val fa2 = F.map(validator.validate(source))(xs -> _)
 
-        res.map(t => t._1 -> Or(t._2))
-      }
+            val res = F.handleErrorWith(fa1) { e1 =>
+              F.handleErrorWith(fa2) { e2 =>
+                F.raiseError(e1 ::: e2)
+              }
+            }
 
-      override def usage(source: RootSender): String =
-        validator.validate(source).map(_ => s"[$name]").getOrElse(super.usage(source))
+            StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], Base)](res).transform((_, t) => t)
+          }
+        } yield Or(res)
+
+      override def usage(source: RootSender): F[String] =
+        F.handleErrorWith(F.map(validator.validate(source))(_ => s"[$name]"))(_ => super.usage(source))
     }
 }

@@ -2,12 +2,14 @@ package net.katsstuff.scammander
 
 import java.time.LocalDateTime
 
-import net.katsstuff.scammander.CrossCompatibility._
+import scala.language.higherKinds
 
-trait OrNowParameter[RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[RootSender, RunExtra, TabExtra]
-    with OrParameters[RootSender, RunExtra, TabExtra]
-    with NormalParameters[RootSender, RunExtra, TabExtra] =>
+import cats.data.StateT
+
+trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
+  self: ScammanderBase[F, RootSender, RunExtra, TabExtra]
+    with OrParameters[F, RootSender, RunExtra, TabExtra]
+    with NormalParameters[F, RootSender, RunExtra, TabExtra] =>
 
   /**
     * Given some parsed time, alternatively returns now instead.
@@ -16,22 +18,21 @@ trait OrNowParameter[RootSender, RunExtra, TabExtra] {
   type OrNow[Base] = Base Or Now
   implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
     override def name: String = dateTimeParam.name
-    override def parse(
-        source: RootSender,
-        extra: RunExtra,
-        xs: List[RawCmdArg]
-    ): CommandStep[(List[RawCmdArg], LocalDateTime Or Now)] = {
-      val (ys, res) = dateTimeParam.parse(source, extra, xs).getOrElse((xs, LocalDateTime.now))
-      Right((ys, Or(res)))
-    }
+    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], LocalDateTime Or Now] =
+      for {
+        xs <- ScammanderHelper.getArgs[F]
+        res <- {
+          val fa1 = dateTimeParam.parse(source, extra).run(xs)
 
-    override def suggestions(
-        source: RootSender,
-        extra: TabExtra,
-        xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] =
-      dateTimeParam.suggestions(source, extra, xs)
+          val res = F.handleError(fa1)(_ => (xs, LocalDateTime.now()))
 
-    override def usage(source: RootSender): String = s"[$name]"
+          StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], LocalDateTime)](res).transform((_, t) => t)
+        }
+      } yield Or(res)
+
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+      dateTimeParam.suggestions(source, extra)
+
+    override def usage(source: RootSender): F[String] = F.pure(s"[$name]")
   }
 }

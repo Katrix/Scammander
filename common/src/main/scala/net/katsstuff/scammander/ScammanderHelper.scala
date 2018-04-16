@@ -23,7 +23,10 @@ package net.katsstuff.scammander
 import java.util.Locale
 import java.util.regex.Pattern
 
-import net.katsstuff.scammander.CrossCompatibility._
+import scala.language.higherKinds
+
+import cats.{Applicative, MonadError}
+import cats.data.{IndexedStateT, NonEmptyList, StateT}
 
 object ScammanderHelper {
 
@@ -33,20 +36,38 @@ object ScammanderHelper {
 
   val notEnoughArgs = CommandSyntaxError("Not enough arguments", -1)
 
-  type CommandStep[A] = Either[CommandFailure, A]
-
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace.
     */
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 
+  def dropFirstArg[F[_]: Applicative]: StateT[F, List[RawCmdArg], Unit] = StateT.modify[F, List[RawCmdArg]](_.tail)
+
+  def getPos[F[_]: Applicative]: IndexedStateT[F, List[RawCmdArg], List[RawCmdArg], Int] =
+    StateT.inspect[F, List[RawCmdArg], Int](_.headOption.fold(-1)(_.start))
+
+  def getArgs[F[_]: Applicative]: StateT[F, List[RawCmdArg], List[RawCmdArg]] = StateT.get[F, List[RawCmdArg]]
+
+  def firstArgOpt[F[_]: Applicative]: StateT[F, List[RawCmdArg], Option[RawCmdArg]] =
+    StateT.inspect[F, List[RawCmdArg], Option[RawCmdArg]](_.headOption)
+
+  def firstArg[F[_]](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], RawCmdArg] =
+    StateT.inspect[F, List[RawCmdArg], Option[RawCmdArg]](_.headOption).flatMapF { opt =>
+      opt.filter(_.content.nonEmpty).fold[F[RawCmdArg]](F.raiseError(NonEmptyList.one(notEnoughArgs)))(F.pure)
+    }
+
+  def firstArgAndDrop[F[_]](
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], RawCmdArg] =
+    firstArg[F].flatMap(arg => dropFirstArg.map(_ => arg))
+
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace
     * as as they are not quoted.
     */
   def stringToRawArgsQuoted(argumments: String): List[RawCmdArg] = {
-    if(argumments.isEmpty) List(RawCmdArg(0, 0, ""))
+    if (argumments.isEmpty) List(RawCmdArg(0, 0, ""))
     else {
       quotedRegex
         .findAllMatchIn(argumments)
@@ -63,94 +84,105 @@ object ScammanderHelper {
     * Returns the suggestions for a command given the argument list and
     * all the possible string suggestions.
     */
-  def suggestions(
-      parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], _)],
-      xs: List[RawCmdArg],
-      choices: => Iterable[String]
-  ): Either[List[RawCmdArg], Seq[String]] = {
-    parse(xs)
-      .fold(_ => {
-        val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
-        if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
-          Right(Nil)
-        else Right(startsWith.getOrElse(choices.toSeq))
-      }, t => Left(t._1))
+  def suggestions[F[_], E](parse: StateT[F, List[RawCmdArg], E], choices: => Iterable[String])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+    for {
+      xs     <- parse.get
+      parsed <- StateT.liftF(F.attempt(parse.run(xs)))
+      _      <- StateT.set(parsed.map(_._1).getOrElse(Nil))
+    } yield
+      parsed match {
+        case Left(_) =>
+          val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
+          if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
+            Some(Nil)
+          else Some(startsWith.getOrElse(choices.toSeq))
+        case Right(_) => None
+      }
   }
 
   /**
     * Returns the suggestions for a command given the argument list and
     * all the possible suggestions.
     */
-  def suggestionsNamed[A](
-      parse: List[RawCmdArg] => CommandStep[(List[RawCmdArg], _)],
-      xs: List[RawCmdArg],
-      choices: => Iterable[A]
-  )(implicit named: HasName[A]): Either[List[RawCmdArg], Seq[String]] = suggestions(parse, xs, choices.map(named.apply))
+  def suggestionsNamed[F[_], A, E](parse: StateT[F, List[RawCmdArg], E], choices: => Iterable[A])(
+      implicit named: HasName[A],
+      F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+    suggestions(parse, choices.map(named.apply))
 
   /**
     * Parse a single paramter given the current argument list, and a map of the valid choices.
     */
-  def parse[A](
-      name: String,
-      xs: List[RawCmdArg],
-      choices: Map[String, A]
-  ): Either[CommandFailure, (List[RawCmdArg], A)] = {
+  def parse[F[_], A](name: String, choices: Map[String, A])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], A] = {
     assert(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
-    if (xs.nonEmpty && xs.head.content.nonEmpty) {
-      val head = xs.head
-      choices
-        .get(head.content.toLowerCase(Locale.ROOT))
-        .toRight(CommandUsageError(s"${head.content} is not a valid $name", head.start))
-        .map(xs.tail -> _)
-    } else Left(notEnoughArgs)
+
+    for {
+      arg <- firstArg
+      res <- StateT.liftF[F, List[RawCmdArg], A](
+        choices
+          .get(arg.content.toLowerCase(Locale.ROOT))
+          .fold[F[A]](
+            F.raiseError(NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
+          )(F.pure)
+      )
+      _ <- dropFirstArg
+    } yield res
   }
 
   /**
     * Parse a paramter given the current argument list, and a list of the valid choices.
     */
-  def parse[A](name: String, xs: List[RawCmdArg], choices: Iterable[A])(
-      implicit named: HasName[A]
-  ): Either[CommandFailure, (List[RawCmdArg], A)] = parse(name, xs, choices.map(obj => named(obj) -> obj).toMap)
+  def parse[F[_], A](name: String, choices: Iterable[A])(
+      implicit named: HasName[A],
+      F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], A] = parse(name, choices.map(obj => named(obj) -> obj).toMap)
 
   /**
     * Parse a set for a paramter given the current argument list, and a map of the valid choices.
     */
   //Based on PatternMatchingCommandElement in Sponge
-  def parseMany[A](
-      name: String,
-      xs: List[RawCmdArg],
-      choices: Map[String, A]
-  ): Either[CommandFailure, (List[RawCmdArg], Set[A])] = {
+  def parseMany[F[_], A](name: String, choices: Map[String, A])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], Set[A]] = {
     def formattedPattern(input: String) = {
       // Anchor matches to the beginning -- this lets us use find()
       val usedInput = if (!input.startsWith("^")) s"^$input" else input
       Pattern.compile(usedInput, Pattern.CASE_INSENSITIVE)
     }
 
-    if (xs.nonEmpty && xs.head.content.nonEmpty) {
-      val RawCmdArg(pos, _, unformattedPattern) = xs.head
+    for {
+      arg <- firstArg
+      res <- StateT.liftF[F, List[RawCmdArg], Set[A]]({
+        val RawCmdArg(pos, _, unformattedPattern) = arg
 
-      val pattern         = formattedPattern(unformattedPattern)
-      val filteredChoices = choices.filterKeys(k => pattern.matcher(k).find())
-      filteredChoices
-        .collectFirst {
-          case (k, v) if k.equalsIgnoreCase(unformattedPattern) => Right(xs.tail -> Set(v))
-        }
-        .getOrElse {
-          if (filteredChoices.nonEmpty) {
-            Right(xs.tail -> filteredChoices.values.toSet)
-          } else {
-            Left(CommandUsageError(s"$unformattedPattern is not a valid $name", pos))
+        val pattern         = formattedPattern(unformattedPattern)
+        val filteredChoices = choices.filterKeys(k => pattern.matcher(k).find())
+        filteredChoices
+          .collectFirst {
+            case (k, v) if k.equalsIgnoreCase(unformattedPattern) => F.pure(Set(v))
           }
-        }
-    } else Left(notEnoughArgs)
+          .getOrElse {
+            if (filteredChoices.nonEmpty) {
+              F.pure(filteredChoices.values.toSet)
+            } else {
+              F.raiseError(NonEmptyList.one(CommandUsageError(s"$unformattedPattern is not a valid $name", pos)))
+            }
+          }
+      })
+      _ <- dropFirstArg
+    } yield res
   }
 
   /**
     * Parse a set for a paramter given the current argument list, and a list of the valid choices.
     */
-  def parseMany[A](name: String, xs: List[RawCmdArg], choices: Iterable[A])(
-      implicit named: HasName[A]
-  ): Either[CommandFailure, (List[RawCmdArg], Set[A])] =
-    parseMany(name, xs, choices.map(obj => named(obj).toLowerCase(Locale.ROOT) -> obj).toMap)
+  def parseMany[F[_], A](
+      name: String,
+      choices: Iterable[A]
+  )(implicit named: HasName[A], F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], Set[A]] =
+    parseMany(name, choices.map(obj => named(obj).toLowerCase(Locale.ROOT) -> obj).toMap)
 }

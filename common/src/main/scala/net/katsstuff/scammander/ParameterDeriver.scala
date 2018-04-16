@@ -20,12 +20,14 @@
  */
 package net.katsstuff.scammander
 
+import scala.language.higherKinds
+
+import cats.Monad
+import cats.data.StateT
 import shapeless._
 
-import net.katsstuff.scammander.CrossCompatibility._
-
-trait ParameterDeriver[RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[RootSender, RunExtra, TabExtra] =>
+trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
+  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
 
   implicit def hConsParam[H, T <: HList](
       implicit hParam: Lazy[Parameter[H]],
@@ -34,49 +36,38 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] {
     new Parameter[H :: T] {
       override def name: String = s"${hParam.value.name} ${tParam.value.name}"
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], ::[H, T])] = {
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], ::[H, T]] =
         for {
-          t1 <- hParam.value.parse(source, extra, xs)
-          t2 <- tParam.value.parse(source, extra, t1._1)
-        } yield (t2._1, t1._2 :: t2._2)
-      }
+          h <- hParam.value.parse(source, extra)
+          t <- tParam.value.parse(source, extra)
+        } yield h :: t
 
-      override def suggestions(
-          source: RootSender,
-          extra: TabExtra,
-          xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] = {
-        for {
-          ys <- hParam.value.suggestions(source, extra, xs).left
-          zs <- tParam.value.suggestions(source, extra, ys).left
-        } yield zs
-      }
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+        hParam.value.suggestions(source, extra).flatMap {
+          case Some(ret) => StateT.pure(Some(ret))
+          case None      => tParam.value.suggestions(source, extra)
+        }
 
-      override def usage(source: RootSender): String = {
+      override def usage(source: RootSender): F[String] = {
         lazy val hUsage = hParam.value.usage(source)
         lazy val tUsage = tParam.value.usage(source)
 
-        if (tUsage.isEmpty) hUsage else s"$hUsage $tUsage"
+        F.map2(hUsage, tUsage) { (h, t) =>
+          if (t.isEmpty) h else s"$h $t"
+        }
       }
     }
 
   implicit val hNilParam: Parameter[HNil] = new Parameter[HNil] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], HNil)] =
-      Right((xs, HNil))
+    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], HNil] =
+      StateT.pure(HNil)
 
-    override def suggestions(
-        source: RootSender,
-        extra: TabExtra,
-        xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = Left(xs)
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+      StateT.pure(None)
 
-    override def usage(source: RootSender): String = ""
+    override def usage(source: RootSender): F[String] = F.pure("")
   }
 
   implicit def cConsParam[H, T <: Coproduct](
@@ -86,51 +77,60 @@ trait ParameterDeriver[RootSender, RunExtra, TabExtra] {
     new Parameter[H :+: T] {
       override def name: String = s"${hParam.value.name}|${tParam.value.name}"
 
-      override def parse(
-          source: RootSender,
-          extra: RunExtra,
-          xs: List[RawCmdArg]
-      ): CommandStep[(List[RawCmdArg], :+:[H, T])] = {
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], H :+: T] = {
+        val hParse:      StateT[F, List[RawCmdArg], H :+: T] = hParam.value.parse(source, extra).map(Inl.apply)
+        lazy val tParse: StateT[F, List[RawCmdArg], H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
+
         for {
-          e1 <- hParam.value.parse(source, extra, xs).map { case (ys, h) => ys -> Inl(h) }.left
-          e2 <- tParam.value.parse(source, extra, xs).map { case (ys, t) => ys -> Inr(t) }.left
-        } yield e1.merge(e2)
+          xs <- ScammanderHelper.getArgs[F]
+          res <- {
+            val fh      = hParse.run(xs)
+            lazy val ft = tParse.run(xs)
+
+            val res = F.handleErrorWith(fh) { e1 =>
+              F.handleErrorWith(ft) { e2 =>
+                F.raiseError(e1 ::: e2)
+              }
+            }
+
+            StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], H :+: T)](res).transform((_, t) => t)
+          }
+        } yield res
       }
 
-      override def suggestions(
-          source: RootSender,
-          extra: TabExtra,
-          xs: List[RawCmdArg]
-      ): Either[List[RawCmdArg], Seq[String]] = {
-        val eh = hParam.value.suggestions(source, extra, xs)
-        val et = tParam.value.suggestions(source, extra, xs)
-        if (eh.isRight || et.isRight) Right(eh.getOrElse(Nil) ++ et.getOrElse(Nil))
-        else {
-          val rest = if (eh.left.get.lengthCompare(et.left.get.size) > 0) eh.left.get else et.left.get
-          Left(rest)
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+        val eh = hParam.value.suggestions(source, extra)
+        val et = tParam.value.suggestions(source, extra)
+
+        val SF = Monad[StateT[F, List[RawCmdArg], ?]]
+
+        SF.map2(eh, et) {
+          case (Some(h), Some(t)) => Some(h ++ t)
+          case (Some(h), None)    => Some(h)
+          case (None, Some(t))    => Some(t)
+          case (None, None)       => None
         }
       }
 
-      override def usage(source: RootSender): String = {
+      override def usage(source: RootSender): F[String] = {
         lazy val hUsage = hParam.value.usage(source)
         lazy val tUsage = tParam.value.usage(source)
 
-        if (tUsage.isEmpty) hUsage else s"$hUsage|$tUsage"
+        F.map2(hUsage, tUsage) { (h, t) =>
+          if (t.isEmpty) h else s"$h|$t"
+        }
       }
     }
 
   implicit val cNilParam: Parameter[CNil] = new Parameter[CNil] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra, xs: List[RawCmdArg]): CommandStep[(List[RawCmdArg], CNil)] =
-      Command.syntaxErrorStep("Could not parse argument", xs.headOption.map(_.start).getOrElse(-1))
+    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], CNil] =
+      ScammanderHelper.getPos[F].flatMapF(pos => Command.syntaxErrorF("Could not parse argument", pos))
 
-    override def suggestions(
-        source: RootSender,
-        extra: TabExtra,
-        xs: List[RawCmdArg]
-    ): Either[List[RawCmdArg], Seq[String]] = Left(xs)
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+      StateT.pure(None)
 
-    override def usage(source: RootSender): String = ""
+    override def usage(source: RootSender): F[String] = F.pure("")
   }
 }
