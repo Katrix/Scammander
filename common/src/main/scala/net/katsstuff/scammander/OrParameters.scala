@@ -51,24 +51,14 @@ trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
     new ProxyParameter[OrSource[Base], Base] {
       override def param: Parameter[Base] = parameter
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], OrSource[Base]] =
-        for {
-          xs <- ScammanderHelper.getArgs[F]
-          res <- {
-            val fa1      = param.parse(source, extra).run(xs)
-            lazy val fa2 = F.map(validator.validate(source))(xs -> _)
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], OrSource[Base]] = {
+        val fa1:      StateT[F, List[RawCmdArg], Base] = param.parse(source, extra)
+        lazy val fa2: StateT[F, List[RawCmdArg], Base] = StateT.liftF(validator.validate(source))
 
-            val res = F.handleErrorWith(fa1) { e1 =>
-              F.handleErrorWith(fa2) { e2 =>
-                F.raiseError(e1 ::: e2)
-              }
-            }
-
-            StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], Base)](res).transform((_, t) => t)
-          }
-        } yield Or(res)
+        ScammanderHelper.withFallback(fa1, fa2).map(Or.apply)
+      }
 
       override def usage(source: RootSender): F[String] =
-        F.handleErrorWith(F.map(validator.validate(source))(_ => s"[$name]"))(_ => super.usage(source))
+        ScammanderHelper.withFallback(F.map(validator.validate(source))(_ => s"[$name]"), super.usage(source))
     }
 }

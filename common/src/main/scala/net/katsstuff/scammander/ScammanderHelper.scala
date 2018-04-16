@@ -25,8 +25,8 @@ import java.util.regex.Pattern
 
 import scala.language.higherKinds
 
-import cats.{Applicative, MonadError}
 import cats.data.{IndexedStateT, NonEmptyList, StateT}
+import cats.{Applicative, MonadError}
 
 object ScammanderHelper {
 
@@ -61,6 +61,27 @@ object ScammanderHelper {
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], RawCmdArg] =
     firstArg[F].flatMap(arg => dropFirstArg.map(_ => arg))
+
+  def withFallback[F[_], A](first: StateT[F, List[RawCmdArg], A], second: => StateT[F, List[RawCmdArg], A])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], A] = {
+    StateT[F, List[RawCmdArg], A] { xs =>
+      F.handleErrorWith(first.run(xs)) { e1 =>
+        F.handleErrorWith(second.run(xs)) { e2 =>
+          F.raiseError(e1 ::: e2)
+        }
+      }
+    }
+  }
+
+  def withFallback[F[_], A](first: F[A], second: => F[A])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): F[A] =
+    F.handleErrorWith(first) { e1 =>
+      F.handleErrorWith(second) { e2 =>
+        F.raiseError(e1 ::: e2)
+      }
+    }
 
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace

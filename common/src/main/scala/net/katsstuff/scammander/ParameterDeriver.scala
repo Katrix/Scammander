@@ -81,21 +81,7 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
         val hParse:      StateT[F, List[RawCmdArg], H :+: T] = hParam.value.parse(source, extra).map(Inl.apply)
         lazy val tParse: StateT[F, List[RawCmdArg], H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
 
-        for {
-          xs <- ScammanderHelper.getArgs[F]
-          res <- {
-            val fh      = hParse.run(xs)
-            lazy val ft = tParse.run(xs)
-
-            val res = F.handleErrorWith(fh) { e1 =>
-              F.handleErrorWith(ft) { e2 =>
-                F.raiseError(e1 ::: e2)
-              }
-            }
-
-            StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], H :+: T)](res).transform((_, t) => t)
-          }
-        } yield res
+        ScammanderHelper.withFallback(hParse, tParse)
       }
 
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
