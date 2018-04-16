@@ -107,7 +107,7 @@ trait SpongeParameter {
               StateT.pure[CommandStep, List[RawCmdArg], Set[Player]](players)
             } catch {
               case e: IllegalArgumentException =>
-                StateT.liftF[CommandStep, List[RawCmdArg], Set[Player]](Command.errorF(e.getMessage))
+                Command.errorState(e.getMessage)
             }
           } else {
             ScammanderHelper.parseMany(name, Sponge.getServer.getOnlinePlayers.asScala)
@@ -169,10 +169,7 @@ trait SpongeParameter {
   implicit val userParam: Parameter[Set[User]] = new Parameter[Set[User]] {
     private val userStorage = Sponge.getServiceManager.provideUnchecked(classOf[UserStorageService])
     override def name: String = "user"
-    override def parse(
-        source: CommandSource,
-        extra: Unit
-    ): StateT[CommandStep, List[RawCmdArg], Set[User]] = {
+    override def parse(source: CommandSource, extra: Unit): StateT[CommandStep, List[RawCmdArg], Set[User]] = {
       val players = allPlayerParam.parse(source, extra).map(_.map(player => player: User))
       val users = {
         val users = userStorage.getAll.asScala
@@ -235,8 +232,8 @@ trait SpongeParameter {
         arg <- ScammanderHelper.firstArg[CommandStep]
         res <- {
           if (arg.content.startsWith("~")) {
-            StateT
-              .liftF[CommandStep, List[RawCmdArg], Double](
+            Command
+              .liftFStateParse(
                 relativeToOpt.toRight(
                   Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )
@@ -276,14 +273,13 @@ trait SpongeParameter {
                 StateT.pure[CommandStep, List[RawCmdArg], Set[Location[World]]](entities.map(_.getLocation))
               } catch {
                 case e: IllegalArgumentException =>
-                  StateT.liftF[CommandStep, List[RawCmdArg], Set[Location[World]]](Command.errorF(e.getMessage))
+                  Command.errorState[Set[Location[World]]](e.getMessage)
               }
           }
           .getOrElse {
             val worldfromParam = oneWorldParam.parse(source, extra)
-            lazy val worldFromLoc = StateT.liftF[CommandStep, List[RawCmdArg], OnlyOne[WorldProperties]](
-              locationSender.validate(source).map(pos => OnlyOne(pos.getExtent.getProperties))
-            )
+            lazy val worldFromLoc =
+              Command.liftFStateParse(locationSender.validate(source).map(pos => OnlyOne(pos.getExtent.getProperties)))
 
             val parseWorld = ScammanderHelper.withFallback(worldfromParam, worldFromLoc)
 
@@ -369,11 +365,11 @@ trait SpongeParameter {
           }
           val loader = HoconConfigurationLoader.builder.setSource(reader).build
 
-          StateT.liftF[CommandStep, List[RawCmdArg], DataContainer](Try {
-            DataTranslators.CONFIGURATION_NODE.translate(loader.load())
-          }.toEither.left.map { e =>
-            Command.syntaxErrorNel(e.getMessage, pos)
-          })
+          Command.liftEitherStateParse(
+            Try(DataTranslators.CONFIGURATION_NODE.translate(loader.load())).toEither.left.map { e =>
+              Command.syntaxErrorNel(e.getMessage, pos)
+            }
+          )
         }
       } yield res
     }

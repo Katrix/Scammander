@@ -40,11 +40,9 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
       override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A] = {
         for {
           arg <- ScammanderHelper.firstArgAndDrop[F]
-          res <- StateT.liftF(
-            F.fromEither(
-              Try(s(arg.content)).toEither.left
-                .map(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
-            )
+          res <- Command.liftEitherStateParse(
+            Try(s(arg.content)).toEither.left
+              .map(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
           )
         } yield res
       }
@@ -60,7 +58,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
       override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A] =
         for {
           arg <- ScammanderHelper.firstArgAndDrop[F]
-          res <- StateT.liftF(parser(arg.content))
+          res <- Command.liftFStateParse(parser(arg.content))
         } yield res
 
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
@@ -83,19 +81,17 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], URL] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- StateT.liftF(
-          F.fromEither(
-            Try(new URL(arg.content))
-              .flatMap { url =>
-                Try {
-                  url.toURI //Checks validity
-                  url
-                }
+        res <- Command.liftEitherStateParse(
+          Try(new URL(arg.content))
+            .flatMap { url =>
+              Try {
+                url.toURI //Checks validity
+                url
               }
-              .toEither
-              .left
-              .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
-          )
+            }
+            .toEither
+            .left
+            .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
         )
       } yield res
 
@@ -113,21 +109,19 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], LocalDateTime] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- StateT.liftF(
-          F.fromEither(
-            Try(LocalDateTime.parse(arg.content))
-              .recoverWith {
-                case _: DateTimeParseException =>
-                  Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg.content)))
-              }
-              .recoverWith {
-                case _: DateTimeParseException =>
-                  Try(LocalDateTime.of(LocalDate.parse(arg.content), LocalTime.MIDNIGHT))
-              }
-              .toEither
-              .left
-              .map(_ => Command.syntaxErrorNel("Invalid date-time!", arg.start))
-          )
+        res <- Command.liftEitherStateParse(
+          Try(LocalDateTime.parse(arg.content))
+            .recoverWith {
+              case _: DateTimeParseException =>
+                Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg.content)))
+            }
+            .recoverWith {
+              case _: DateTimeParseException =>
+                Try(LocalDateTime.of(LocalDate.parse(arg.content), LocalTime.MIDNIGHT))
+            }
+            .toEither
+            .left
+            .map(_ => Command.syntaxErrorNel("Invalid date-time!", arg.start))
         )
       } yield res
 
@@ -159,11 +153,9 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
             if (!s1.startsWith("P")) "P" + s1 else s1
           } else s
 
-          StateT.liftF[F, List[RawCmdArg], Duration](
-            F.fromEither(
-              Try(Duration.parse(usedS)).toEither.left
-                .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
-            )
+          Command.liftEitherStateParse(
+            Try(Duration.parse(usedS)).toEither.left
+              .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
           )
         }
       } yield res

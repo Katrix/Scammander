@@ -26,7 +26,7 @@ import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
 import cats.MonadError
-import cats.data.{NonEmptyList, StateT}
+import cats.data.{IndexedStateT, NonEmptyList, StateT}
 import net.katsstuff.scammander
 import shapeless._
 
@@ -166,10 +166,36 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       }
 
     /**
+      * Lifts an value F[A] into the parser State.
+      */
+    def liftFStateParse[A](fa: F[A]): StateT[F, List[RawCmdArg], A] = ScammanderHelper.liftFStateParse(fa)
+
+    def liftEitherStateParse[A](value: Either[NonEmptyList[CommandFailure], A]): StateT[F, List[RawCmdArg], A] =
+      ScammanderHelper.liftEitherState[F, List[RawCmdArg]](value)
+
+    /**
       * Creates a command success step.
       */
     def successF(result: Result = defaultCommandSuccess): F[CommandSuccess] =
       F.pure(CommandSuccess(result))
+
+    /**
+      * Creates a generic command error step.
+      */
+    def errorState[A](msg: String, shouldShowUsage: Boolean = false): StateT[F, List[RawCmdArg], A] =
+      liftFStateParse(errorF(msg, shouldShowUsage))
+
+    /**
+      * Creates a syntax command error step.
+      */
+    def syntaxErrorState[A](msg: String, pos: Int): StateT[F, List[RawCmdArg], A] =
+      liftFStateParse(syntaxErrorF(msg, pos))
+
+    /**
+      * Creates a usage  command error step.
+      */
+    def usageErrorState[A](msg: String, pos: Int): StateT[F, List[RawCmdArg], A] =
+      liftFStateParse(usageErrorF(msg, pos))
 
     /**
       * Creates a generic command error step.
@@ -301,12 +327,14 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
 
         val parse = for {
-          arg <- ScammanderHelper.firstArgOpt
-          _   <- ScammanderHelper.dropFirstArg
+          arg <- ScammanderHelper.firstArgOpt[F]
+          _   <- ScammanderHelper.dropFirstArg[F]
           res <- {
-            val res = arg.exists(head => choices.exists(obj => HasName(obj).equalsIgnoreCase(head.content)))
-            if (res) StateT.pure[F, List[RawCmdArg], Boolean](true)
-            else StateT.liftF[F, List[RawCmdArg], Boolean](Command.errorF("Not parsed"))
+            val isObj = arg.exists(head => choices.exists(obj => HasName(obj).equalsIgnoreCase(head.content)))
+            val res: StateT[F, List[RawCmdArg], Boolean] =
+              if (isObj) StateT.pure[F, List[RawCmdArg], Boolean](true)
+              else Command.liftFStateParse(Command.errorF("Not parsed"))
+            res
           }
         } yield res
 

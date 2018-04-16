@@ -179,7 +179,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           val someParsed: F[(List[RawCmdArg], Option[A])] = F.map(parsed)(t => t._1 -> Some(t._2))
           val handled = F.handleError(someParsed)(_ => xs -> None)
 
-          StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], Option[A])](handled).transform((_, t) => t)
+          Command.liftFStateParse(handled).transform((_, t) => t)
         }
       } yield res
     }

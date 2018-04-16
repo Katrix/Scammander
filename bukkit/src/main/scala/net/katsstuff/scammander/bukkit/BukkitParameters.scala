@@ -141,8 +141,7 @@ trait BukkitParameters {
         arg <- ScammanderHelper.firstArg[CommandStep]
         res <- {
           if (arg.content.startsWith("~")) {
-            StateT
-              .liftF[CommandStep, List[RawCmdArg], Double](
+            Command.liftFStateParse(
                 relativeToOpt.toRight(
                   Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )

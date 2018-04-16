@@ -26,7 +26,7 @@ trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
 
           val res = F.handleError(fa1)(_ => (xs, LocalDateTime.now()))
 
-          StateT.liftF[F, List[RawCmdArg], (List[RawCmdArg], LocalDateTime)](res).transform((_, t) => t)
+          Command.liftFStateParse(res).transform((_, t) => t)
         }
       } yield Or(res)
 

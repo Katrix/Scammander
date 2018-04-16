@@ -42,6 +42,22 @@ object ScammanderHelper {
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 
+  private[scammander] final class LiftFPartiallyApplied[State](val b: Boolean = true) extends AnyVal {
+    def apply[F[_]: Applicative, A](value: F[A]): StateT[F, State, A] =
+      StateT.liftF[F, State, A](value)
+  }
+  private[scammander] final class LiftEitherPartiallyApplied[F[_], State](val b: Boolean = true) extends AnyVal {
+    def apply[E, A](value: Either[E, A])(implicit F: MonadError[F, E]): StateT[F, State, A] =
+      StateT.liftF[F, State, A](F.fromEither(value))
+  }
+
+
+  def liftFState[State]: LiftFPartiallyApplied[State] = new LiftFPartiallyApplied[State]
+
+  def liftFStateParse[F[_]: Applicative, A](fa: F[A]): StateT[F, List[RawCmdArg], A] = liftFState[List[RawCmdArg]](fa)
+
+  def liftEitherState[F[_], State]: LiftEitherPartiallyApplied[F, State] = new LiftEitherPartiallyApplied[F, State]
+
   def dropFirstArg[F[_]: Applicative]: StateT[F, List[RawCmdArg], Unit] = StateT.modify[F, List[RawCmdArg]](_.tail)
 
   def getPos[F[_]: Applicative]: IndexedStateT[F, List[RawCmdArg], List[RawCmdArg], Int] =
@@ -143,7 +159,7 @@ object ScammanderHelper {
 
     for {
       arg <- firstArg
-      res <- StateT.liftF[F, List[RawCmdArg], A](
+      res <- liftFStateParse(
         choices
           .get(arg.content.toLowerCase(Locale.ROOT))
           .fold[F[A]](
@@ -177,7 +193,7 @@ object ScammanderHelper {
 
     for {
       arg <- firstArg
-      res <- StateT.liftF[F, List[RawCmdArg], Set[A]]({
+      res <- liftFStateParse {
         val RawCmdArg(pos, _, unformattedPattern) = arg
 
         val pattern         = formattedPattern(unformattedPattern)
@@ -193,7 +209,7 @@ object ScammanderHelper {
               F.raiseError(NonEmptyList.one(CommandUsageError(s"$unformattedPattern is not a valid $name", pos)))
             }
           }
-      })
+      }
       _ <- dropFirstArg
     } yield res
   }

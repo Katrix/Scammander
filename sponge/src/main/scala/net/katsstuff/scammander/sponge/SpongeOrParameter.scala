@@ -102,7 +102,7 @@ trait SpongeOrParameter {
         pos <- ScammanderHelper.getPos
         res <- ScammanderHelper.withFallback(
           parameter.parse(source, extra),
-          StateT.liftF[CommandStep, List[RawCmdArg], Base](targeter.getTarget(source, pos))
+          Command.liftFStateParse(targeter.getTarget(source, pos))
         )
       } yield Or(res)
 
