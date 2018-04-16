@@ -24,6 +24,7 @@ import scala.language.higherKinds
 
 import cats.Monad
 import cats.data.StateT
+import cats.syntax.all._
 import shapeless._
 import shapeless.labelled.FieldType
 
@@ -80,7 +81,7 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
         lazy val hUsage = hName.value.name
         lazy val tUsage = tParam.value.usage(source)
 
-        F.map(tUsage)(t => if (t.isEmpty) s"<$hUsage>" else s"<$hUsage> $t")
+        tUsage.map(t => if (t.isEmpty) s"<$hUsage>" else s"<$hUsage> $t")
       }
     }
 

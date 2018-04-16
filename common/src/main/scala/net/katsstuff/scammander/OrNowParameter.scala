@@ -5,6 +5,7 @@ import java.time.LocalDateTime
 import scala.language.higherKinds
 
 import cats.data.StateT
+import cats.syntax.all._
 
 trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra]
@@ -19,20 +20,16 @@ trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
   implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
     override def name: String = dateTimeParam.name
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], LocalDateTime Or Now] =
-      for {
-        xs <- ScammanderHelper.getArgs[F]
-        res <- {
-          val fa1 = dateTimeParam.parse(source, extra).run(xs)
-
-          val res = F.handleError(fa1)(_ => (xs, LocalDateTime.now()))
-
-          Command.liftFStateParse(res).transform((_, t) => t)
-        }
-      } yield Or(res)
+      ScammanderHelper
+        .withFallback(
+          dateTimeParam.parse(source, extra),
+          StateT.pure[F, List[RawCmdArg], LocalDateTime](LocalDateTime.now())
+        )
+        .map(Or.apply)
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
       dateTimeParam.suggestions(source, extra)
 
-    override def usage(source: RootSender): F[String] = F.pure(s"[$name]")
+    override def usage(source: RootSender): F[String] = s"[$name]".pure
   }
 }

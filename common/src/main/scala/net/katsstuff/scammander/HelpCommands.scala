@@ -3,6 +3,7 @@ package net.katsstuff.scammander
 import scala.language.higherKinds
 
 import cats.Foldable
+import cats.syntax.all._
 
 trait HelpCommands[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra]
@@ -30,19 +31,20 @@ trait HelpCommands[F[_], RootSender, RunExtra, TabExtra] {
           case ZeroOrMore(Nil) =>
             sendMultipleCommandHelp(title, source, commands)
           case ZeroOrMore(Seq(head, tail @ _*)) =>
-            val first = F.map(commandMap.get(head).toF(s"No command named $head"))(List(head) -> _)
+            val first = commandMap.get(head).toF(s"No command named $head").map(List(head) -> _)
 
-            val childCommandStep = F.flatMap(first) { fst =>
+            val childCommandStep = first.flatMap { fst =>
               import cats.instances.list._
               Foldable[List].foldLeftM[F, String, (List[String], StaticChildCommand[_, _])](tail.toList, fst) {
                 case ((acc, command), child) =>
-                  F.map(command.command.childrenMap.get(child).toF(s"No command named $child"))(
-                    cmd => (child :: acc) -> cmd
-                  )
+                  command.command.childrenMap
+                    .get(child)
+                    .toF(s"No command named $child")
+                    .map(cmd => (child :: acc) -> cmd)
               }
             }
 
-            F.flatMap(childCommandStep) {
+            childCommandStep.flatMap {
               case (path, childCommand) => sendCommandHelp(title, source, childCommand, path.reverse)
             }
         }

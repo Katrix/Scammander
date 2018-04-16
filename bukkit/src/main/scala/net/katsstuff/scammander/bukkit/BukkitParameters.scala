@@ -9,6 +9,7 @@ import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, OfflinePlayer, World}
 
 import cats.data.{NonEmptyList, StateT}
+import cats.syntax.all._
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import net.katsstuff.scammander
 import shapeless.Witness
@@ -92,9 +93,9 @@ trait BukkitParameters {
         source: CommandSender,
         extra: BukkitExtra
     ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = {
-      val parse: StateT[CommandStep, List[RawCmdArg], Boolean] = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
+      val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
         val res = Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(arg.content))
-        if (res) F.pure(true) else Command.errorF("Not parsed")
+        if (res) true.pure else Command.errorF("Not parsed")
       }
 
       ScammanderHelper.suggestionsNamed(parse, Bukkit.getOfflinePlayers)

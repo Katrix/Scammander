@@ -30,9 +30,10 @@ import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.plugin.java.JavaPlugin
 
 import cats.MonadError
-import cats.data.{NonEmptyList, StateT}
-import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
+import cats.data.NonEmptyList
+import cats.syntax.all._
 import net.katsstuff.scammander
+import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait BukkitBase
     extends ScammanderBase[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] {
@@ -200,17 +201,17 @@ trait BukkitBase
           val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
           val extra      = BukkitExtra(bukkitCommand, alias)
 
-          val parse: StateT[CommandStep, List[RawCmdArg], Boolean] = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
+          val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
             val isParsed =
               if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
               else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-            if (isParsed) F.pure(true) else Command.errorF("Not child")
+            if (isParsed) true.pure else Command.errorF("Not child")
           }
           val childSuggestions =
             ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(parsedArgs).map(_.getOrElse(Nil))
           val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
           val ret = childSuggestions match {
-            case Right(suggestions) => F.map(paramSuggestions)(suggestions ++ _)
+            case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
             case Left(_)            => paramSuggestions
           }
 

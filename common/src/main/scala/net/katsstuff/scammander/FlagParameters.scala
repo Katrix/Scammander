@@ -22,7 +22,7 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.data.{NonEmptyList, StateT}
+import cats.data.StateT
 import shapeless.Witness
 
 trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {

@@ -23,6 +23,7 @@ package net.katsstuff.scammander
 import scala.language.higherKinds
 
 import cats.data.StateT
+import cats.syntax.all._
 
 trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
@@ -59,6 +60,6 @@ trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
       }
 
       override def usage(source: RootSender): F[String] =
-        ScammanderHelper.withFallback(F.map(validator.validate(source))(_ => s"[$name]"), super.usage(source))
+        ScammanderHelper.withFallback(validator.validate(source).map(_ => s"[$name]"), super.usage(source))
     }
 }

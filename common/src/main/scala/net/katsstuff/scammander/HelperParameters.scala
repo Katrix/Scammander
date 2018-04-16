@@ -24,6 +24,7 @@ import scala.language.higherKinds
 
 import cats.Monad
 import cats.data.{NonEmptyList, StateT}
+import cats.syntax.all._
 
 trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
@@ -38,7 +39,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
     implicit def onlyOneValidator[A](implicit validator: UserValidator[A]): UserValidator[OnlyOne[A]] =
       new UserValidator[OnlyOne[A]] {
         override def validate(sender: RootSender): F[OnlyOne[A]] =
-          F.map(validator.validate(sender))(OnlyOne.apply)
+          validator.validate(sender).map(OnlyOne.apply)
       }
   }
 
@@ -50,7 +51,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
         ScammanderHelper.getPos[F].flatMap(pos => param.parse(source, extra).map(pos -> _))
 
         ScammanderHelper.getPos[F].flatMap(pos => param.parse(source, extra).map(pos -> _)).transformF { fa =>
-          F.flatMap(fa) {
+          fa.flatMap {
             case (rest, (_, seq)) if seq.size == 1 => F.pure((rest, OnlyOne(seq.head)))
             case (_, (pos, seq)) if seq.isEmpty    => Command.usageErrorF("No values found", pos)
             case (_, (pos, _))                     => Command.usageErrorF("More than one possible value", pos)
@@ -75,7 +76,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
       ScammanderHelper.getArgs
         .flatMapF { xs =>
           if (xs.nonEmpty && xs.head.content.nonEmpty) {
-            F.pure(RemainingAsString(xs.map(_.content).mkString(" ")))
+            RemainingAsString(xs.map(_.content).mkString(" ")).pure
           } else F.raiseError[RemainingAsString](NonEmptyList.one(ScammanderHelper.notEnoughArgs))
         }
         .modify(_ => Nil)
@@ -122,7 +123,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           SF.whileM[Vector, Option[Seq[String]]](stillMore)(mkSuggestions).map(_.last)
         }
 
-        override def usage(source: RootSender): F[String] = F.pure(s"<${param.name}...>")
+        override def usage(source: RootSender): F[String] = s"<${param.name}...>".pure
       }
   }
 
@@ -159,7 +160,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           SF.whileM[Vector, Option[Seq[String]]](stillMore)(mkSuggestions).map(_.last)
         }
 
-        override def usage(source: RootSender): F[String] = F.pure(s"[${param.name}...]")
+        override def usage(source: RootSender): F[String] = s"[${param.name}...]".pure
       }
   }
 
@@ -167,21 +168,9 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
 
     override def name: String = param.name
 
-    override def parse(
-        source: RootSender,
-        extra: RunExtra
-    ): StateT[F, List[RawCmdArg], Option[A]] = {
-      val parse = param.parse(source, extra)
-      for {
-        xs <- parse.get
-        res <- {
-          val parsed = parse.run(xs)
-          val someParsed: F[(List[RawCmdArg], Option[A])] = F.map(parsed)(t => t._1 -> Some(t._2))
-          val handled = F.handleError(someParsed)(_ => xs -> None)
-
-          Command.liftFStateParse(handled).transform((_, t) => t)
-        }
-      } yield res
+    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Option[A]] = {
+      val parse = param.parse(source, extra).map[Option[A]](Some.apply)
+      ScammanderHelper.withFallback(parse, StateT.pure[F, List[RawCmdArg], Option[A]](None))
     }
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =

@@ -24,6 +24,7 @@ import org.spongepowered.api.{CatalogType, Sponge}
 import com.flowpowered.math.vector.Vector3d
 
 import cats.data.{NonEmptyList, StateT}
+import cats.syntax.all._
 import net.katsstuff.scammander
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
@@ -149,7 +150,7 @@ trait SpongeParameter {
           val entities = Selector.parse(arg.content).resolve(source).asScala.collect {
             case EntityType(entity) => entity
           }
-          F.pure(entities.toSet)
+          entities.toSet.pure
         } catch {
           case e: IllegalArgumentException => Command.errorF(e.getMessage)
         }

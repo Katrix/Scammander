@@ -24,6 +24,7 @@ import scala.language.higherKinds
 
 import cats.Monad
 import cats.data.StateT
+import cats.syntax.all._
 import shapeless._
 
 trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
@@ -117,6 +118,6 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
       StateT.pure(None)
 
-    override def usage(source: RootSender): F[String] = F.pure("")
+    override def usage(source: RootSender): F[String] = "".pure
   }
 }

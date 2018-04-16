@@ -32,9 +32,10 @@ import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
 import cats.MonadError
-import cats.data.{NonEmptyList, StateT}
-import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
+import cats.data.NonEmptyList
+import cats.syntax.all._
 import net.katsstuff.scammander
+import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait SpongeBase
     extends ScammanderBase[
@@ -173,17 +174,17 @@ trait SpongeBase
       if (doChildCommand && childCommand.testPermission(source)) {
         childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
       } else {
-        val parse: StateT[CommandStep, List[RawCmdArg], Boolean] = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
+        val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
           val isParsed =
             if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
             else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-          if (isParsed) F.pure(true) else Command.errorF("Not child")
+          if (isParsed) true.pure else Command.errorF("Not child")
         }
         val childSuggestions =
           ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args).map(_.getOrElse(Nil))
         val paramSuggestions = command.suggestions(source, targetPosition, args)
         val ret = childSuggestions match {
-          case Right(suggestions) => F.map(paramSuggestions)(suggestions ++ _)
+          case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
           case Left(_)            => paramSuggestions
         }
 

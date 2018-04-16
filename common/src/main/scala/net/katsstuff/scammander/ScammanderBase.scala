@@ -26,7 +26,8 @@ import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
 import cats.MonadError
-import cats.data.{IndexedStateT, NonEmptyList, StateT}
+import cats.data.{NonEmptyList, StateT}
+import cats.syntax.all._
 import net.katsstuff.scammander
 import shapeless._
 
@@ -106,7 +107,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess]
 
     def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): F[Seq[String]] =
-      F.map(par.suggestions(source, extra).run(strArgs))(_._2.getOrElse(Nil))
+      par.suggestions(source, extra).run(strArgs).map(_._2.getOrElse(Nil))
 
     def usage(source: RootSender): F[String] = par.usage(source)
 
@@ -285,7 +286,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * The usage for this command.
       */
-    def usage(source: RootSender): F[String] = F.pure(s"<$name>")
+    def usage(source: RootSender): F[String] = s"<$name>".pure
   }
 
   implicit class OptionOps[A](val option: Option[A]) {
@@ -373,7 +374,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), choices.keys)
 
-      override def usage(source: RootSender): F[String] = F.pure(name)
+      override def usage(source: RootSender): F[String] = name.pure
     }
   }
 
@@ -471,6 +472,6 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
       StateT.pure(Some(Nil))
 
-    override def usage(source: RootSender): F[String] = F.pure("")
+    override def usage(source: RootSender): F[String] = "".pure
   }
 }
