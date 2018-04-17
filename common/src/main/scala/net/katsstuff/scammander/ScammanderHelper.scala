@@ -61,7 +61,15 @@ object ScammanderHelper {
 
   def liftEitherState[F[_], State]: LiftEitherPartiallyApplied[F, State] = new LiftEitherPartiallyApplied[F, State]
 
-  def dropFirstArg[F[_]: Applicative]: StateT[F, List[RawCmdArg], Unit] = StateT.modify[F, List[RawCmdArg]](_.tail)
+  def dropFirstArg[F[_]](
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): StateT[F, List[RawCmdArg], Seq[String]] =
+    StateT
+      .modifyF[F, List[RawCmdArg]] { xs =>
+        if (xs.isEmpty) notEnoughArgsErrorF
+        else F.pure(xs.tail)
+      }
+      .map(_ => Nil)
 
   def getPos[F[_]: Applicative]: IndexedStateT[F, List[RawCmdArg], List[RawCmdArg], Int] =
     StateT.inspect[F, List[RawCmdArg], Int](_.headOption.fold(-1)(_.start))
@@ -89,6 +97,21 @@ object ScammanderHelper {
           F.raiseError(e1 ::: e2)
         }
       }
+    }
+  }
+
+  def fallbackSuggestions[F[_]](
+      first: StateT[F, List[RawCmdArg], Seq[String]],
+      second: StateT[F, List[RawCmdArg], Seq[String]]
+  )(implicit F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], Seq[String]] = {
+    StateT[F, List[RawCmdArg], Seq[String]] { xs =>
+      F.attemptT(first.run(xs))
+        .semiflatMap {
+          case (ys, fSuggestions) =>
+            F.attemptT(second.run(ys)).getOrElse((ys, fSuggestions))
+        }
+        .fold(F.raiseError[(List[RawCmdArg], Seq[String])], F.pure)
+        .flatten
     }
   }
 
@@ -125,20 +148,18 @@ object ScammanderHelper {
     */
   def suggestions[F[_], E](parse: StateT[F, List[RawCmdArg], E], choices: => Iterable[String])(
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+  ): StateT[F, List[RawCmdArg], Seq[String]] = {
     for {
       xs     <- parse.get
       parsed <- StateT.liftF(F.attempt(parse.run(xs)))
       _      <- StateT.set(parsed.map(_._1).getOrElse(Nil))
-    } yield
-      parsed match {
-        case Left(_) =>
-          val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
-          if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
-            Some(Nil)
-          else Some(startsWith.getOrElse(choices.toSeq))
-        case Right(_) => None
-      }
+    } yield {
+      val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
+      if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
+        Nil
+      else
+        startsWith.getOrElse(choices.toSeq)
+    }
   }
 
   /**
@@ -148,8 +169,7 @@ object ScammanderHelper {
   def suggestionsNamed[F[_], A, E](parse: StateT[F, List[RawCmdArg], E], choices: => Iterable[A])(
       implicit named: HasName[A],
       F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-    suggestions(parse, choices.map(named.apply))
+  ): StateT[F, List[RawCmdArg], Seq[String]] = suggestions(parse, choices.map(named.apply))
 
   /**
     * Parse a single paramter given the current argument list, and a map of the valid choices.
@@ -160,7 +180,7 @@ object ScammanderHelper {
     assert(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
 
     for {
-      arg <- firstArg
+      arg <- firstArgAndDrop
       res <- liftFStateParse(
         choices
           .get(arg.content.toLowerCase(Locale.ROOT))
@@ -168,7 +188,6 @@ object ScammanderHelper {
             F.raiseError(NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
           )(F.pure)
       )
-      _ <- dropFirstArg
     } yield res
   }
 
@@ -194,7 +213,7 @@ object ScammanderHelper {
     }
 
     for {
-      arg <- firstArg
+      arg <- firstArgAndDrop
       res <- liftFStateParse {
         val RawCmdArg(pos, _, unformattedPattern) = arg
 
@@ -212,7 +231,6 @@ object ScammanderHelper {
             }
           }
       }
-      _ <- dropFirstArg
     } yield res
   }
 

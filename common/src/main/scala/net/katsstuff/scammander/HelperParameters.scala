@@ -80,8 +80,8 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
         }
         .modify(_ => Nil)
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      SF.pure(Some(Nil))
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      SF.pure(Nil: Seq[String]).modify(_ => Nil: List[RawCmdArg])
   }
 
   /**
@@ -107,15 +107,12 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           }
         }
 
-        override def suggestions(
-            source: RootSender,
-            extra: TabExtra
-        ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+        override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] = {
           import cats.instances.vector._
           val mkSuggestions = param.suggestions(source, extra)
           val stillMore     = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          SF.whileM[Vector, Option[Seq[String]]](stillMore)(mkSuggestions).map(_.last)
+          SF.whileM[Vector, Seq[String]](stillMore)(mkSuggestions).map(_.lastOption.getOrElse(Nil))
         }
 
         override def usage(source: RootSender): F[String] = s"<${param.name}...>".pure
@@ -141,15 +138,12 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           res.map(ZeroOrMore.apply)
         }
 
-        override def suggestions(
-            source: RootSender,
-            extra: TabExtra
-        ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+        override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] = {
           import cats.instances.vector._
           val mkSuggestions = param.suggestions(source, extra)
           val stillMore     = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          SF.whileM[Vector, Option[Seq[String]]](stillMore)(mkSuggestions).map(_.last)
+          SF.whileM[Vector, Seq[String]](stillMore)(mkSuggestions).map(_.lastOption.getOrElse(Nil))
         }
 
         override def usage(source: RootSender): F[String] = s"[${param.name}...]".pure
@@ -165,7 +159,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
       ScammanderHelper.withFallbackState(parse, SF.pure(None))
     }
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
       param.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = s"[${param.name}]".pure

@@ -24,7 +24,7 @@ trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
         .withFallbackState(dateTimeParam.parse(source, extra), SF.pure(LocalDateTime.now()))
         .map(Or.apply)
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
       dateTimeParam.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = s"[$name]".pure

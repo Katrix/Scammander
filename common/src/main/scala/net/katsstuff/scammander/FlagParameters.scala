@@ -58,37 +58,23 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
           }
         }
 
-      override def suggestions(
-          source: RootSender,
-          extra: TabExtra,
-      ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
-        val parse = ScammanderHelper
-          .getArgs[F]
-          .flatMapF[Boolean] { xs =>
-            val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
-            if (idx != -1) F.pure(true)
-            else Command.errorF("Not a flag")
-          }
-          .modify(_.tail)
-
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
         ScammanderHelper.getArgs[F].flatMap { xs =>
-          if (xs.isEmpty || xs.head.content.isEmpty) SF.pure(Some(Seq(flagName)))
+          if (xs.isEmpty || xs.head.content.isEmpty) SF.pure(Seq(flagName))
           else {
             val idx = xs.indexWhere(_.content.startsWith("-"))
-            if (idx == -1) StateT.pure(None)
+            if (idx == -1) StateT.pure(Nil)
             else {
               val before = xs.take(idx)
-              ScammanderHelper
-                .suggestions(parse, Seq(flagName))
+              val suggestionsFlagPart = ScammanderHelper
+                .suggestions(parse(source, tabExtraToRunExtra(extra)), Seq(flagName))
                 .contramap[List[RawCmdArg]](_.drop(idx + 1))
                 .modify(ys => before ::: ys)
-                .flatMap(
-                  suggestions => suggestions.fold(flagParam.suggestions(source, extra))(seq => SF.pure(Some(seq)))
-                )
+              val suggestionsValuePart = flagParam.suggestions(source, extra)
+              ScammanderHelper.fallbackSuggestions(suggestionsFlagPart, suggestionsValuePart)
             }
           }
         }
-      }
 
       override def usage(source: RootSender): F[String] = flagParam.usage(source).map(fUsage => s"$flagName $fUsage")
     }
@@ -111,31 +97,21 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
           else (xs.patch(idx, Nil, 1), BooleanFlag(true))
         }
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
-        val parse = ScammanderHelper
-          .getArgs[F]
-          .flatMapF[Boolean] { xs =>
-            val idx = xs.indexWhere(_.content.equalsIgnoreCase(flagName))
-            if (idx != -1) true.pure
-            else Command.errorF("Not a flag")
-          }
-          .modify(_.tail)
-
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
         ScammanderHelper.getArgs[F].flatMap { xs =>
-          if (xs.isEmpty || xs.head.content.isEmpty) SF.pure(Some(Seq(flagName)))
+          if (xs.isEmpty || xs.head.content.isEmpty) SF.pure(Seq(flagName))
           else {
             val idx = xs.indexWhere(_.content.startsWith("-"))
-            if (idx == -1) SF.pure(None)
+            if (idx == -1) SF.pure(Nil)
             else {
               val before = xs.take(idx)
               ScammanderHelper
-                .suggestions(parse, Seq(flagName))
+                .suggestions(parse(source, tabExtraToRunExtra(extra)), Seq(flagName))
                 .contramap[List[RawCmdArg]](_.drop(idx + 1))
                 .modify(ys => before ::: ys)
             }
           }
         }
-      }
 
       override def usage(source: RootSender): F[String] = F.pure(flagName)
     }
@@ -160,16 +136,10 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
         t2 <- paramParam.parse(source, extra)
       } yield Flags(t1, t2)
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
       for {
         flagSuggestions  <- flagsParam.suggestions(source, extra)
         paramSuggestions <- paramParam.suggestions(source, extra)
-      } yield
-        (flagSuggestions, paramSuggestions) match {
-          case (Some(flag), Some(param)) => Some(flag ++ param)
-          case (Some(flag), None)        => Some(flag)
-          case (None, Some(param))       => Some(param)
-          case (None, None)              => None
-        }
+      } yield flagSuggestions ++ paramSuggestions
   }
 }

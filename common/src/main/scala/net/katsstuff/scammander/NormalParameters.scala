@@ -46,8 +46,8 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           )
         } yield res
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-        ScammanderHelper.dropFirstArg[F].map(_ => Some(Nil))
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+        ScammanderHelper.dropFirstArg[F]
     }
 
   def mkSingle[A](parName: String, parser: String => F[A], possibleSuggestions: () => Seq[String]): Parameter[A] =
@@ -60,7 +60,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           res <- Command.liftFStateParse(parser(arg.content))
         } yield res
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), possibleSuggestions())
     }
 
@@ -94,8 +94,8 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      ScammanderHelper.dropFirstArg[F].map(_ => Some(Nil))
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      ScammanderHelper.dropFirstArg[F]
   }
 
   implicit val bigDecimalParam: Parameter[BigDecimal] = primitiveParam("decimal number", BigDecimal.apply)
@@ -124,13 +124,13 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
       for {
         arg <- ScammanderHelper.firstArgOpt[F].map(_.fold("")(_.content))
         _   <- ScammanderHelper.dropFirstArg[F]
       } yield {
         val date = LocalDateTime.now().withNano(0).toString
-        if (date.startsWith(arg)) Some(Seq(date)) else None
+        if (date.startsWith(arg)) Seq(date) else Nil
       }
   }
 
@@ -158,7 +158,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         }
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      ScammanderHelper.dropFirstArg[F].map(_ => Some(Nil))
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      ScammanderHelper.dropFirstArg[F]
   }
 }

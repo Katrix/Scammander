@@ -82,9 +82,9 @@ trait SpongeParameter {
       override def suggestions(
           source: CommandSource,
           extra: Location[World]
-      ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
+      ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
         if (source.hasPermission(perm)) super.suggestions(source, extra)
-        else ScammanderHelper.dropFirstArg.map(_ => None)
+        else ScammanderHelper.dropFirstArg
     }
 
   implicit val allPlayerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
@@ -120,7 +120,7 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = {
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = {
       ScammanderHelper.firstArgOpt.flatMap {
         case Some(arg) =>
           val choices =
@@ -159,10 +159,10 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = {
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = {
       ScammanderHelper.firstArgOpt.flatMap {
         case Some(arg) => ScammanderHelper.suggestions(parse(source, ()), Selector.complete(arg.content).asScala)
-        case None      => ScammanderHelper.dropFirstArg.map(_ => None)
+        case None      => ScammanderHelper.dropFirstArg
       }
     }
   }
@@ -192,7 +192,7 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
       ScammanderHelper.suggestions(parse(source, ()), userStorage.getAll.asScala.collect {
         case profile if profile.getName.isPresent => profile.getName.get()
       })
@@ -219,8 +219,8 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
-      ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg.map(_ => None)
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
+      ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg
 
     private def parseRelativeDouble(
         source: CommandSource,
@@ -295,21 +295,21 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = {
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = {
       ScammanderHelper.firstArgOpt.flatMap { cmdArg =>
         cmdArg
           .collect {
             case RawCmdArg(_, _, arg) if arg.startsWith("@") =>
               try {
                 Selector.parse(arg)
-                ScammanderHelper.dropFirstArg[CommandStep].map[Option[Seq[String]]](_ => None)
+                ScammanderHelper.dropFirstArg[CommandStep]
               } catch {
                 case _: IllegalArgumentException =>
-                  SF.pure[Option[Seq[String]]](Some(Selector.complete(arg).asScala))
+                  SF.pure[Seq[String]](Selector.complete(arg).asScala)
               }
           }
           .getOrElse {
-            ScammanderHelper.withFallbackState[CommandStep, Option[Seq[String]]](
+            ScammanderHelper.fallbackSuggestions(
               worldParam.suggestions(source, extra),
               vector3dParam.suggestions(source, extra)
             )
@@ -346,7 +346,7 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = ScammanderHelper.dropFirstArg.map(_ => None)
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = ScammanderHelper.dropFirstArg
   }
 
   implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
@@ -375,7 +375,7 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = ScammanderHelper.dropFirstArg.map(_ => None)
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = ScammanderHelper.dropFirstArg
   }
 
   //TODO: text

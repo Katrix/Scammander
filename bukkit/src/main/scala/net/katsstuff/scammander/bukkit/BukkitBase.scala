@@ -208,7 +208,7 @@ trait BukkitBase
             if (isParsed) true.pure else Command.errorF("Not child")
           }
           val childSuggestions =
-            ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(parsedArgs).map(_.getOrElse(Nil))
+            ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(parsedArgs)
           val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
           val ret = childSuggestions match {
             case Right(suggestions) => paramSuggestions.map(suggestions ++ _)

@@ -181,7 +181,7 @@ trait SpongeBase
           if (isParsed) true.pure else Command.errorF("Not child")
         }
         val childSuggestions =
-          ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args).map(_.getOrElse(Nil))
+          ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args)
         val paramSuggestions = command.suggestions(source, targetPosition, args)
         val ret = childSuggestions match {
           case Right(suggestions) => paramSuggestions.map(suggestions ++ _)

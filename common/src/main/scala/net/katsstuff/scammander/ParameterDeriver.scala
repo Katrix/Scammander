@@ -42,11 +42,11 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
           t <- tParam.value.parse(source, extra)
         } yield h :: t
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-        hParam.value.suggestions(source, extra).flatMap {
-          case Some(ret) => SF.pure(Some(ret))
-          case None      => tParam.value.suggestions(source, extra)
-        }
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+        ScammanderHelper.fallbackSuggestions(
+          hParam.value.suggestions(source, extra),
+          tParam.value.suggestions(source, extra)
+        )
 
       override def usage(source: RootSender): F[String] = {
         lazy val hUsage = hParam.value.usage(source)
@@ -64,8 +64,8 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], HNil] =
       SF.pure(HNil)
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      SF.pure(None)
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      SF.pure(Nil)
 
     override def usage(source: RootSender): F[String] = F.pure("")
   }
@@ -84,16 +84,11 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
         ScammanderHelper.withFallbackState(hParse, tParse)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
-        val eh = hParam.value.suggestions(source, extra)
-        val et = tParam.value.suggestions(source, extra)
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] = {
+        val sfh = hParam.value.suggestions(source, extra)
+        val sft = tParam.value.suggestions(source, extra)
 
-        SF.map2(eh, et) {
-          case (Some(h), Some(t)) => Some(h ++ t)
-          case (Some(h), None)    => Some(h)
-          case (None, Some(t))    => Some(t)
-          case (None, None)       => None
-        }
+        SF.map2(sfh, sft)(_ ++ _)
       }
 
       override def usage(source: RootSender): F[String] = {
@@ -112,8 +107,8 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], CNil] =
       ScammanderHelper.getPos[F].flatMapF(pos => Command.syntaxErrorF("Could not parse argument", pos))
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      SF.pure(None)
+    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      SF.pure(Nil)
 
     override def usage(source: RootSender): F[String] = "".pure
   }

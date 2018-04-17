@@ -8,7 +8,6 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, OfflinePlayer, World}
 
-import cats.Monad
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
@@ -50,7 +49,8 @@ trait BukkitParameters {
           source: CommandSender,
           extra: BukkitExtra,
       ): StateT[CommandStep, List[RawCmdArg], NeedPermission[S, A]] =
-        if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
+        if (source.hasPermission(perm))
+          param.parse(source, extra).map(NeedPermission.apply)
         else
           ScammanderHelper.getPos.flatMapF { pos =>
             Command.usageErrorF("You do not have the permissions needed to use this parameter", pos)
@@ -59,9 +59,9 @@ trait BukkitParameters {
       override def suggestions(
           source: CommandSender,
           extra: BukkitExtra
-      ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
+      ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
         if (source.hasPermission(perm)) super.suggestions(source, extra)
-        else ScammanderHelper.dropFirstArg[CommandStep].map(_ => Some(Nil))
+        else ScammanderHelper.dropFirstArg[CommandStep]
     }
 
   //TODO: Selector with NMS
@@ -93,7 +93,7 @@ trait BukkitParameters {
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] = {
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = {
       val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
         val res = Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(arg.content))
         if (res) true.pure else Command.errorF("Not parsed")
@@ -128,10 +128,8 @@ trait BukkitParameters {
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
-      ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg.map(
-        _ => Some(Nil)
-      )
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
+      ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg
 
     private def parseRelativeDouble(
         source: CommandSender,
