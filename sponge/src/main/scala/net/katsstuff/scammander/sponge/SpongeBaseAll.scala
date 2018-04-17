@@ -9,7 +9,12 @@ import net.katsstuff.scammander
 
 trait SpongeBaseAll
     extends SpongeBase
-    with ScammanderBaseAll[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
+    with ScammanderBaseAll[
+      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+      CommandSource,
+      Unit,
+      Location[World]
+    ]
     with SpongeValidators
     with SpongeParameter
     with SpongeOrParameter

@@ -22,7 +22,6 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.Monad
 import cats.data.StateT
 import cats.syntax.all._
 import shapeless._
@@ -70,12 +69,11 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
           t <- tParam.value.parse(source, extra)
         } yield labelled.field[HK](h) :: t
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
+      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
         hParam.value.suggestions(source, extra).flatMap {
-          case Some(ret) => StateT.pure(Some(ret))
+          case Some(ret) => SF.pure(Some(ret))
           case None      => tParam.value.suggestions(source, extra)
         }
-      }
 
       override def usage(source: RootSender): F[String] = {
         lazy val hUsage = hName.value.name
@@ -100,14 +98,12 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
         lazy val tParse: StateT[F, List[RawCmdArg], FieldType[HK, HV] :+: T] =
           tParam.value.parse(source, extra).map(Inr.apply)
 
-        ScammanderHelper.withFallback(hParse, tParse)
+        ScammanderHelper.withFallbackState(hParse, tParse)
       }
 
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
         val eh = hParam.value.suggestions(source, extra)
         val et = tParam.value.suggestions(source, extra)
-
-        val SF = Monad[StateT[F, List[RawCmdArg], ?]]
 
         SF.map2(eh, et) {
           case (Some(h), Some(t)) => Some(h ++ t)

@@ -22,7 +22,6 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.Monad
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 
@@ -47,17 +46,16 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
     new ProxyParameter[OnlyOne[A], Set[A]] {
       override def param: Parameter[Set[A]] = setParam
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], OnlyOne[A]] = {
-        ScammanderHelper.getPos[F].flatMap(pos => param.parse(source, extra).map(pos -> _))
-
-        ScammanderHelper.getPos[F].flatMap(pos => param.parse(source, extra).map(pos -> _)).transformF { fa =>
+      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], OnlyOne[A]] =
+        SF.tuple2(ScammanderHelper.getPos, param.parse(source, extra)).transformF { fa =>
           fa.flatMap {
-            case (rest, (_, seq)) if seq.size == 1 => F.pure((rest, OnlyOne(seq.head)))
-            case (_, (pos, seq)) if seq.isEmpty    => Command.usageErrorF("No values found", pos)
-            case (_, (pos, _))                     => Command.usageErrorF("More than one possible value", pos)
+            case (rest, (_, set)) if set.size == 1 => F.pure((rest, OnlyOne(set.head)))
+            case (_, (pos, set)) if set.isEmpty =>
+              Command.usageErrorF[(List[RawCmdArg], OnlyOne[A])]("No values found", pos)
+            case (_, (pos, _)) =>
+              Command.usageErrorF[(List[RawCmdArg], OnlyOne[A])]("More than one possible value", pos)
           }
         }
-      }
     }
 
   /**
@@ -72,18 +70,18 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
   implicit val remainingAsStringParam: Parameter[RemainingAsString] = new Parameter[RemainingAsString] {
     override def name = "strings..."
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], RemainingAsString] = {
+    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], RemainingAsString] =
       ScammanderHelper.getArgs
         .flatMapF { xs =>
-          if (xs.nonEmpty && xs.head.content.nonEmpty) {
+          if (xs.nonEmpty && xs.head.content.nonEmpty)
             RemainingAsString(xs.map(_.content).mkString(" ")).pure
-          } else F.raiseError[RemainingAsString](NonEmptyList.one(ScammanderHelper.notEnoughArgs))
+          else
+            ScammanderHelper.notEnoughArgsErrorF[F, RemainingAsString]
         }
         .modify(_ => Nil)
-    }
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      StateT.pure(Some(Nil))
+      SF.pure(Some(Nil))
   }
 
   /**
@@ -100,8 +98,6 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           val parse     = param.parse(source, extra)
           val stillMore = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          val SF = Monad[StateT[F, List[RawCmdArg], ?]]
-
           val res = SF.whileM[Vector, A](stillMore)(parse)
 
           res.flatMapF { vec =>
@@ -116,7 +112,6 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
             extra: TabExtra
         ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
           import cats.instances.vector._
-          val SF            = Monad[StateT[F, List[RawCmdArg], ?]]
           val mkSuggestions = param.suggestions(source, extra)
           val stillMore     = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
@@ -141,8 +136,6 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           val parse     = param.parse(source, extra)
           val stillMore = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          val SF = Monad[StateT[F, List[RawCmdArg], ?]]
-
           val res = SF.whileM[Vector, A](stillMore)(parse)
 
           res.map(ZeroOrMore.apply)
@@ -153,7 +146,6 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
             extra: TabExtra
         ): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
           import cats.instances.vector._
-          val SF            = Monad[StateT[F, List[RawCmdArg], ?]]
           val mkSuggestions = param.suggestions(source, extra)
           val stillMore     = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
@@ -170,12 +162,12 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
 
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Option[A]] = {
       val parse = param.parse(source, extra).map[Option[A]](Some.apply)
-      ScammanderHelper.withFallback(parse, StateT.pure[F, List[RawCmdArg], Option[A]](None))
+      ScammanderHelper.withFallbackState(parse, SF.pure(None))
     }
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
       param.suggestions(source, extra)
 
-    override def usage(source: RootSender): F[String] = F.pure(s"[${param.name}]")
+    override def usage(source: RootSender): F[String] = s"[${param.name}]".pure
   }
 }

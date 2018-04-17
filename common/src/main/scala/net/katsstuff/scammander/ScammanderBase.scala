@@ -25,7 +25,7 @@ import java.util.Locale
 import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
-import cats.MonadError
+import cats.{Monad, MonadError}
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import net.katsstuff.scammander
@@ -34,6 +34,9 @@ import shapeless._
 trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   implicit def F: MonadError[F, NonEmptyList[CommandFailure]]
+
+  type SF[A] = StateT[F, List[RawCmdArg], A]
+  def SF: Monad[SF] = Monad[SF]
 
   protected type Result
   protected type StaticChildCommand[Sender, Param] <: SharedStaticChildCommand[Sender, Param]
@@ -171,6 +174,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       */
     def liftFStateParse[A](fa: F[A]): StateT[F, List[RawCmdArg], A] = ScammanderHelper.liftFStateParse(fa)
 
+    /**
+      * Lifts an either value into the parser state.
+      */
     def liftEitherStateParse[A](value: Either[NonEmptyList[CommandFailure], A]): StateT[F, List[RawCmdArg], A] =
       ScammanderHelper.liftEitherState[F, List[RawCmdArg]](value)
 
@@ -326,14 +332,13 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
         ScammanderHelper.parseMany[F, A](name, choices)
 
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] = {
-
         val parse = for {
           arg <- ScammanderHelper.firstArgOpt[F]
           _   <- ScammanderHelper.dropFirstArg[F]
           res <- {
             val isObj = arg.exists(head => choices.exists(obj => HasName(obj).equalsIgnoreCase(head.content)))
             val res: StateT[F, List[RawCmdArg], Boolean] =
-              if (isObj) StateT.pure[F, List[RawCmdArg], Boolean](true)
+              if (isObj) SF.pure(true)
               else Command.liftFStateParse(Command.errorF("Not parsed"))
             res
           }
@@ -439,8 +444,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
           source: RootSender,
           extra: RunExtra
       ): StateT[F, List[RawCmdArg], DynamicCommand[Args, Identifier, Sender, Param]] =
-        ScammanderHelper
-          .parse[F, DynamicCommand[Args, Identifier, Sender, Param]](name, cmd.names.map(_ -> dynamic).toMap)
+        ScammanderHelper.parse(name, cmd.names.map(_ -> dynamic).toMap)
 
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), cmd.names)
@@ -454,7 +458,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       ScammanderHelper.getArgs
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      StateT.pure(Some(Nil))
+      SF.pure(Some(Nil))
   }
 
   trait NotUsed
@@ -470,7 +474,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       }
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =
-      StateT.pure(Some(Nil))
+      SF.pure(Some(Nil))
 
     override def usage(source: RootSender): F[String] = "".pure
   }

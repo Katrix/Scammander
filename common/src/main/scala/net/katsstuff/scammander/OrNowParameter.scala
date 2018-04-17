@@ -21,10 +21,7 @@ trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
     override def name: String = dateTimeParam.name
     override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], LocalDateTime Or Now] =
       ScammanderHelper
-        .withFallback(
-          dateTimeParam.parse(source, extra),
-          StateT.pure[F, List[RawCmdArg], LocalDateTime](LocalDateTime.now())
-        )
+        .withFallbackState(dateTimeParam.parse(source, extra), SF.pure(LocalDateTime.now()))
         .map(Or.apply)
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Option[Seq[String]]] =

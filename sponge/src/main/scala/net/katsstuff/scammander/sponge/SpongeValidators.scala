@@ -16,7 +16,12 @@ import net.katsstuff.scammander
 import shapeless._
 
 trait SpongeValidators {
-  self: ScammanderBase[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]] =>
+  self: ScammanderBase[
+    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+    CommandSource,
+    Unit,
+    Location[World]
+  ] =>
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player     => Right(player)

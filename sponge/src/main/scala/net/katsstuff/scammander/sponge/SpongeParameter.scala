@@ -105,7 +105,7 @@ trait SpongeParameter {
                 }
                 .toSet
 
-              StateT.pure[CommandStep, List[RawCmdArg], Set[Player]](players)
+              SF.pure(players)
             } catch {
               case e: IllegalArgumentException =>
                 Command.errorState(e.getMessage)
@@ -186,7 +186,7 @@ trait SpongeParameter {
         ScammanderHelper.parseMany(name, users)
       }
 
-      ScammanderHelper.withFallback(players, users)
+      ScammanderHelper.withFallbackState(players, users)
     }
 
     override def suggestions(
@@ -220,10 +220,7 @@ trait SpongeParameter {
         source: CommandSource,
         extra: Location[World]
     ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
-      ScammanderHelper.dropFirstArg
-        .flatMap(_ => ScammanderHelper.dropFirstArg)
-        .flatMap(_ => ScammanderHelper.dropFirstArg)
-        .map(_ => None)
+      ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg.map(_ => None)
 
     private def parseRelativeDouble(
         source: CommandSource,
@@ -234,14 +231,14 @@ trait SpongeParameter {
         res <- {
           if (arg.content.startsWith("~")) {
             Command
-              .liftFStateParse(
+              .liftEitherStateParse(
                 relativeToOpt.toRight(
                   Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )
               )
               .flatMap { relativeTo =>
                 val newArg = arg.content.substring(1)
-                if (newArg.isEmpty) StateT.pure(relativeTo)
+                if (newArg.isEmpty) SF.pure(relativeTo)
                 else {
                   doubleParam
                     .parse(source, ())
@@ -271,7 +268,7 @@ trait SpongeParameter {
             case RawCmdArg(_, _, arg) if arg.startsWith("@") =>
               try {
                 val entities = Selector.parse(arg).resolve(source).asScala.toSet
-                StateT.pure[CommandStep, List[RawCmdArg], Set[Location[World]]](entities.map(_.getLocation))
+                SF.pure(entities.map(_.getLocation))
               } catch {
                 case e: IllegalArgumentException =>
                   Command.errorState[Set[Location[World]]](e.getMessage)
@@ -282,7 +279,7 @@ trait SpongeParameter {
             lazy val worldFromLoc =
               Command.liftFStateParse(locationSender.validate(source).map(pos => OnlyOne(pos.getExtent.getProperties)))
 
-            val parseWorld = ScammanderHelper.withFallback(worldfromParam, worldFromLoc)
+            val parseWorld = ScammanderHelper.withFallbackState(worldfromParam, worldFromLoc)
 
             for {
               worldProp <- parseWorld
@@ -308,11 +305,11 @@ trait SpongeParameter {
                 ScammanderHelper.dropFirstArg[CommandStep].map[Option[Seq[String]]](_ => None)
               } catch {
                 case _: IllegalArgumentException =>
-                  StateT.pure[CommandStep, List[RawCmdArg], Option[Seq[String]]](Some(Selector.complete(arg).asScala))
+                  SF.pure[Option[Seq[String]]](Some(Selector.complete(arg).asScala))
               }
           }
           .getOrElse {
-            ScammanderHelper.withFallback[CommandStep, Option[Seq[String]]](
+            ScammanderHelper.withFallbackState[CommandStep, Option[Seq[String]]](
               worldParam.suggestions(source, extra),
               vector3dParam.suggestions(source, extra)
             )
@@ -343,7 +340,7 @@ trait SpongeParameter {
       }
       val fromPlayer = playerParam.parse(source, extra).map(_.getConnection.getAddress.getAddress)
 
-      ScammanderHelper.withFallback(fromIp, fromPlayer)
+      ScammanderHelper.withFallbackState(fromIp, fromPlayer)
     }
 
     override def suggestions(

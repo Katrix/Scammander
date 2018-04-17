@@ -13,10 +13,29 @@ import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameter
 import net.katsstuff.scammander
 
 trait SpongeHelpCommands
-    extends HelpCommands[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]] {
-  self: ScammanderBase[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
-    with NormalParameters[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
-    with HelperParameters[({type L[A] = Either[NonEmptyList[scammander.CommandFailure], A]})#L, CommandSource, Unit, Location[World]]
+    extends HelpCommands[
+      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+      CommandSource,
+      Unit,
+      Location[World]
+    ] {
+  self: ScammanderBase[
+    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+    CommandSource,
+    Unit,
+    Location[World]
+  ] with NormalParameters[
+      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+      CommandSource,
+      Unit,
+      Location[World]
+    ]
+    with HelperParameters[
+      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
+      CommandSource,
+      Unit,
+      Location[World]
+    ]
     with SpongeBase =>
 
   override type Title = Text
@@ -52,12 +71,12 @@ trait SpongeHelpCommands
     Command.successF()
   }
 
-
-
-  override def sendCommandHelp(title: Text,
+  override def sendCommandHelp(
+      title: Text,
       source: CommandSource,
       command: StaticChildCommand[_, _],
-      path: List[String]): CommandStep[CommandSuccess] = {
+      path: List[String]
+  ): CommandStep[CommandSuccess] = {
     if (command.testPermission(source)) {
       val commandName = path.mkString("/", " ", "")
       val pages       = PaginationList.builder()

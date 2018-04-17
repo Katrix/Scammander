@@ -5,7 +5,7 @@ import cats.data.NonEmptyList
 class MiscHelperParamSpec extends ScammanderSpec {
 
   implicit val sourceAsDouble: UserValidator[Double] = UserValidator.mkValidator(_ => Right(0D))
-  implicit val sourceAsMyObj: UserValidator[MyObj] = UserValidator.mkValidator(_ => Right(MyObj(myObjName2, 2)))
+  implicit val sourceAsMyObj:  UserValidator[MyObj]  = UserValidator.mkValidator(_ => Right(MyObj(myObjName2, 2)))
 
   test("An or source parameter should work when passed parameters") {
     parse[Double Or Source]("2.3") should contain(Or(2.3D))

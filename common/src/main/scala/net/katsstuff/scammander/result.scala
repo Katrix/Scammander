@@ -25,7 +25,7 @@ package net.katsstuff.scammander
   */
 sealed trait CommandFailure {
   def shouldShowUsage: Boolean
-  def msg: String
+  def msg:             String
 }
 
 /**

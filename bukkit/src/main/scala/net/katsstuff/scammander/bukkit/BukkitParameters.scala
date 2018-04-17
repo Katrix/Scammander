@@ -8,6 +8,7 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, OfflinePlayer, World}
 
+import cats.Monad
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
@@ -86,7 +87,7 @@ trait BukkitParameters {
       lazy val users: StateT[CommandStep, List[RawCmdArg], Set[OfflinePlayer]] =
         ScammanderHelper.parseMany(name, Bukkit.getOfflinePlayers)
 
-      ScammanderHelper.withFallback(players, users)
+      ScammanderHelper.withFallbackState(players, users)
     }
 
     override def suggestions(
@@ -128,10 +129,9 @@ trait BukkitParameters {
         source: CommandSender,
         extra: BukkitExtra
     ): StateT[CommandStep, List[RawCmdArg], Option[Seq[String]]] =
-      ScammanderHelper.dropFirstArg
-        .flatMap(_ => ScammanderHelper.dropFirstArg)
-        .flatMap(_ => ScammanderHelper.dropFirstArg)
-        .map(_ => Some(Nil))
+      ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg.map(
+        _ => Some(Nil)
+      )
 
     private def parseRelativeDouble(
         source: CommandSender,
@@ -142,14 +142,15 @@ trait BukkitParameters {
         arg <- ScammanderHelper.firstArg[CommandStep]
         res <- {
           if (arg.content.startsWith("~")) {
-            Command.liftFStateParse(
+            Command
+              .liftFStateParse(
                 relativeToOpt.toRight(
                   Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )
               )
               .flatMap { relativeTo =>
                 val newArg = arg.content.substring(1)
-                if (newArg.isEmpty) StateT.pure(relativeTo)
+                if (newArg.isEmpty) SF.pure(relativeTo)
                 else {
                   doubleParam
                     .parse(source, extra)

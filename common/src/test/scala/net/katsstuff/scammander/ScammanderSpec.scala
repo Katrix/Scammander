@@ -10,9 +10,10 @@ class ScammanderSpec
     with Matchers
     with ScammanderBaseAll[Either[NonEmptyList[CommandFailure], ?], Unit, Unit, Unit] {
 
-  override protected type Result             = Unit
+  override protected type Result                   = Unit
   protected type StaticChildCommand[Sender, Param] = DummyStaticChildCommand[Sender, Param]
-  case class DummyStaticChildCommand[Sender, Param](command: Command[Sender, Param]) extends SharedStaticChildCommand[Sender, Param]
+  case class DummyStaticChildCommand[Sender, Param](command: Command[Sender, Param])
+      extends SharedStaticChildCommand[Sender, Param]
 
   override protected val defaultCommandSuccess: Unit = ()
 

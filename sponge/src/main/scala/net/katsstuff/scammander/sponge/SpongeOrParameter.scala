@@ -100,10 +100,8 @@ trait SpongeOrParameter {
     override def parse(source: CommandSource, extra: Unit): StateT[CommandStep, List[RawCmdArg], OrTarget[Base]] =
       for {
         pos <- ScammanderHelper.getPos
-        res <- ScammanderHelper.withFallback(
-          parameter.parse(source, extra),
-          Command.liftFStateParse(targeter.getTarget(source, pos))
-        )
+        res <- ScammanderHelper
+          .withFallbackState(parameter.parse(source, extra), Command.liftFStateParse(targeter.getTarget(source, pos)))
       } yield Or(res)
 
     override def usage(source: CommandSource): CommandStep[String] = {

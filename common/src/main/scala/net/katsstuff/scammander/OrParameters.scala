@@ -56,7 +56,7 @@ trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
         val fa1:      StateT[F, List[RawCmdArg], Base] = param.parse(source, extra)
         lazy val fa2: StateT[F, List[RawCmdArg], Base] = Command.liftFStateParse(validator.validate(source))
 
-        ScammanderHelper.withFallback(fa1, fa2).map(Or.apply)
+        ScammanderHelper.withFallbackState(fa1, fa2).map(Or.apply)
       }
 
       override def usage(source: RootSender): F[String] =

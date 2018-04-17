@@ -26,6 +26,7 @@ import java.util.regex.Pattern
 import scala.language.higherKinds
 
 import cats.data.{IndexedStateT, NonEmptyList, StateT}
+import cats.syntax.all._
 import cats.{Applicative, MonadError}
 
 object ScammanderHelper {
@@ -35,6 +36,9 @@ object ScammanderHelper {
   private val quotedRegex = """(?:"((?:[^"\\]|\\.)+)")|((?:\S)+)""".r
 
   val notEnoughArgs = CommandSyntaxError("Not enough arguments", -1)
+
+  def notEnoughArgsErrorF[F[_], A](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): F[A] =
+    F.raiseError(NonEmptyList.one(notEnoughArgs))
 
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace.
@@ -50,7 +54,6 @@ object ScammanderHelper {
     def apply[E, A](value: Either[E, A])(implicit F: MonadError[F, E]): StateT[F, State, A] =
       StateT.liftF[F, State, A](F.fromEither(value))
   }
-
 
   def liftFState[State]: LiftFPartiallyApplied[State] = new LiftFPartiallyApplied[State]
 
@@ -70,15 +73,14 @@ object ScammanderHelper {
 
   def firstArg[F[_]](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], RawCmdArg] =
     StateT.inspect[F, List[RawCmdArg], Option[RawCmdArg]](_.headOption).flatMapF { opt =>
-      opt.filter(_.content.nonEmpty).fold[F[RawCmdArg]](F.raiseError(NonEmptyList.one(notEnoughArgs)))(F.pure)
+      opt.filter(_.content.nonEmpty).fold[F[RawCmdArg]](notEnoughArgsErrorF)(F.pure)
     }
 
   def firstArgAndDrop[F[_]](
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], RawCmdArg] =
-    firstArg[F].flatMap(arg => dropFirstArg.map(_ => arg))
+  ): StateT[F, List[RawCmdArg], RawCmdArg] = firstArg[F] <* dropFirstArg[F]
 
-  def withFallback[F[_], A](first: StateT[F, List[RawCmdArg], A], second: => StateT[F, List[RawCmdArg], A])(
+  def withFallbackState[F[_], A](first: StateT[F, List[RawCmdArg], A], second: => StateT[F, List[RawCmdArg], A])(
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], A] = {
     StateT[F, List[RawCmdArg], A] { xs =>
