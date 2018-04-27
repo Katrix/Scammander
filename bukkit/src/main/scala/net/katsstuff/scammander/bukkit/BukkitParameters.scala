@@ -29,7 +29,7 @@ trait BukkitParameters {
   implicit val worldHasName:         HasName[World]         = HasName.instance((a: World) => a.getName)
   implicit val pluginHasName:        HasName[Plugin]        = HasName.instance((a: Plugin) => a.getName)
 
-  type CommandStep[A] = Either[NonEmptyList[CommandFailure], A]
+  type CommandStep[A] = Either[CommandFailureNEL, A]
 
   /**
     * A class to use for parameter that should require a specific permission.

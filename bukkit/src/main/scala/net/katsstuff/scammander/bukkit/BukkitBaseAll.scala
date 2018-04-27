@@ -12,5 +12,5 @@ trait BukkitBaseAll
     with BukkitValidators
     with BukkitParameters {
 
-  override type CommandStep[A] = Either[NonEmptyList[CommandFailure], A]
+  override type CommandStep[A] = Either[CommandFailureNEL, A]
 }

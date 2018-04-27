@@ -41,9 +41,9 @@ trait BukkitBase
   override protected type Result                            = Boolean
   override protected type StaticChildCommand[Sender, Param] = ChildCommandExtra[Sender, Param]
 
-  type CommandStep[A] = Either[NonEmptyList[CommandFailure], A]
+  type CommandStep[A] = Either[CommandFailureNEL, A]
 
-  override implicit def F: MonadError[Either[NonEmptyList[CommandFailure], ?], NonEmptyList[CommandFailure]] =
+  override implicit def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
     cats.instances.either.catsStdInstancesForEither
 
   case class ChildCommandExtra[Sender, Param](

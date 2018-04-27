@@ -27,7 +27,7 @@ trait SpongeOrParameter {
     ]
     with SpongeValidators =>
 
-  type CommandStep[A] = Either[NonEmptyList[CommandFailure], A]
+  type CommandStep[A] = Either[CommandFailureNEL, A]
 
   /**
     * A typeclass which returns what the sender is currently targeting.

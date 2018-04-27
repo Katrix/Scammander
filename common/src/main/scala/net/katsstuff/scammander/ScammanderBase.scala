@@ -33,7 +33,7 @@ import shapeless._
 
 trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
-  implicit def F: MonadError[F, NonEmptyList[CommandFailure]]
+  implicit def F: MonadError[F, CommandFailureNEL]
 
   type SF[A] = StateT[F, List[RawCmdArg], A]
   def SF: Monad[SF] = Monad[SF]
@@ -84,6 +84,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
   //Results and steps
 
   type CommandFailure = scammander.CommandFailure
+  type CommandFailureNEL = NonEmptyList[CommandFailure]
 
   type CommandError = scammander.CommandError
   val CommandError: scammander.CommandError.type = scammander.CommandError
@@ -177,7 +178,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Lifts an either value into the parser state.
       */
-    def liftEitherStateParse[A](value: Either[NonEmptyList[CommandFailure], A]): StateT[F, List[RawCmdArg], A] =
+    def liftEitherStateParse[A](value: Either[CommandFailureNEL, A]): StateT[F, List[RawCmdArg], A] =
       ScammanderHelper.liftEitherState[F, List[RawCmdArg]](value)
 
     /**
@@ -225,7 +226,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Creates a generic command error NEL.
       */
-    def errorNel[A](msg: String, shouldShowUsage: Boolean = false): NonEmptyList[CommandFailure] =
+    def errorNel[A](msg: String, shouldShowUsage: Boolean = false): CommandFailureNEL =
       NonEmptyList.one(error(msg, shouldShowUsage))
 
     /**
