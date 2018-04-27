@@ -53,6 +53,7 @@ class FlagsParamSpec extends ScammanderSpec {
     def testArgs(args: String, testAgainst: String) =
       suggestions[BooleanFlag[W.`"long"`.T]](args).mkString(" ") should equal(testAgainst)
 
+    testArgs("", "--long")
     testArgs("-", "--long")
     noSuggestions[BooleanFlag[W.`"long"`.T]]("--long")
   }

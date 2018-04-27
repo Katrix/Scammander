@@ -65,7 +65,7 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
       SF.pure(HNil)
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
-      SF.pure(Nil)
+      StateT.liftF(Command.errorF("Suggestions on HNil"))
 
     override def usage(source: RootSender): F[String] = F.pure("")
   }

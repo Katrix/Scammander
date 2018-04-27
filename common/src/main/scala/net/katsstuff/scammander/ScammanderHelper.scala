@@ -131,7 +131,7 @@ object ScammanderHelper {
   def stringToRawArgsQuoted(argumments: String): List[RawCmdArg] = {
     if (argumments.isEmpty) List(RawCmdArg(0, 0, ""))
     else {
-      quotedRegex
+      val xs = quotedRegex
         .findAllMatchIn(argumments)
         .map { m =>
           val quoted = m.group(1) != null
@@ -139,6 +139,8 @@ object ScammanderHelper {
           RawCmdArg(m.start(group), m.end(group), m.group(group))
         }
         .toList
+
+      if(argumments.endsWith(" ")) xs :+ RawCmdArg(argumments.length - 1, argumments.length - 1, "") else xs
     }
   }
 
@@ -150,8 +152,12 @@ object ScammanderHelper {
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], Seq[String]] = {
     for {
-      xs     <- parse.get
-      parsed <- StateT.liftF(F.attempt(parse.run(xs)))
+      xs     <- getArgs[F]
+      parsed <- StateT.liftF {
+        //There is no point in getting suggestions if there are no args
+        if (xs == Nil) notEnoughArgsErrorF[F, Either[NonEmptyList[CommandFailure], (List[RawCmdArg], E)]]
+        else F.attempt(parse.run(xs))
+      }
       _      <- StateT.set(parsed.map(_._1).getOrElse(Nil))
     } yield {
       val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)

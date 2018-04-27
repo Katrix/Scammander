@@ -27,12 +27,14 @@ class MiscHelperParamSpec extends ScammanderSpec {
 
   test("One or more should parse as many as possible") {
     parse[OneOrMore[Int]]("5 4 3") should contain(OneOrMore(NonEmptyList.of(5, 4, 3)))
+    parse[OneOrMore[Int]]("1 2") should contain(OneOrMore(NonEmptyList.of(1, 2)))
     parse[OneOrMore[Int]]("1") should contain(OneOrMore(NonEmptyList.of(1)))
     parse[OneOrMore[Int]]("") should equal(None)
   }
 
   test("Zero or more should parse as many as possible") {
     parse[ZeroOrMore[Int]]("5 4 3") should contain(ZeroOrMore(Seq(5, 4, 3)))
+    parse[ZeroOrMore[Int]]("1 2") should contain(ZeroOrMore(Seq(1, 2)))
     parse[ZeroOrMore[Int]]("1") should contain(ZeroOrMore(Seq(1)))
     parse[ZeroOrMore[Int]]("") should contain(ZeroOrMore(Nil))
   }

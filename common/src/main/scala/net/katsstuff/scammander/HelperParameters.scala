@@ -135,7 +135,14 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
 
           val res = SF.whileM[Vector, A](stillMore)(parse)
 
-          res.map(ZeroOrMore.apply)
+          for {
+            xs <- ScammanderHelper.getArgs[F]
+            withEmpty <- {
+              if (xs.size == 1 && xs.head.content.isEmpty) res.transformF { fa =>
+                F.handleError(fa)(_ => (xs, Vector.empty))
+              } else res
+            }
+          } yield ZeroOrMore(withEmpty)
         }
 
         override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] = {

@@ -12,20 +12,43 @@ class GenericParameterSpec extends ScammanderSpec {
     assert(usage[MyArg2] == "<foo> <bar>")
   }
 
-  case class SuggestionArg(myObj1: OnlyOne[MyObj], i: Int, myObj2: OnlyOne[MyObj])
-  implicit val suggestionParam: Parameter[SuggestionArg] = ParameterDeriver[SuggestionArg].derive
+  case class SuggestionArg1(myObj1: OnlyOne[MyObj], i: Int, myObj2: OnlyOne[MyObj])
+  implicit val suggestion1Param: Parameter[SuggestionArg1] = ParameterDeriver[SuggestionArg1].derive
   test("A product(3) parameter should return the correct suggestions") {
     def testArgs(args: String, testAgainst: String) =
-      suggestions[SuggestionArg](args).mkString(" ") should equal(testAgainst)
+      suggestions[SuggestionArg1](args).mkString(" ") should equal(testAgainst)
 
     testArgs("", s"$myObjName1 $myObjName2 $myObjName3")
     testArgs("f", s"$myObjName1")
     testArgs("ba", s"$myObjName2 $myObjName3")
-    testArgs("bar", s"$myObjName1 $myObjName2 $myObjName3")
+    noSuggestions[SuggestionArg1]("bar")
     testArgs("bar 5 f", s"$myObjName1")
     testArgs("bar 5 ba", s"$myObjName2 $myObjName3")
-    testArgs("bar 5", s"$myObjName1 $myObjName2 $myObjName3")
-    noSuggestions[SuggestionArg]("bar 5 foo")
+    testArgs("bar 5 ", s"$myObjName1 $myObjName2 $myObjName3")
+    noSuggestions[SuggestionArg1]("bar 5 foo")
+  }
+
+  case class SuggestionArg2(first: SuggestionArg1, second: SuggestionArg1)
+  implicit val suggestion2Param: Parameter[SuggestionArg2] = ParameterDeriver[SuggestionArg2].derive
+  test("A product(2) parameter of product(3) parameters should return the correct suggestions") {
+    def testArgs(args: String, testAgainst: String) =
+      suggestions[SuggestionArg2](args).mkString(" ") should equal(testAgainst)
+
+    testArgs("", s"$myObjName1 $myObjName2 $myObjName3")
+    testArgs("f", s"$myObjName1")
+    testArgs("ba", s"$myObjName2 $myObjName3")
+    noSuggestions[SuggestionArg2]("bar")
+    testArgs("bar 5 f", s"$myObjName1")
+    testArgs("bar 5 ba", s"$myObjName2 $myObjName3")
+    testArgs("bar 5 ", s"$myObjName1 $myObjName2 $myObjName3")
+    testArgs("bar 5 foo ", s"$myObjName1 $myObjName2 $myObjName3")
+    testArgs("bar 5 foo f", s"$myObjName1")
+    testArgs("bar 5 foo ba", s"$myObjName2 $myObjName3")
+    noSuggestions[SuggestionArg2]("bar 5 foo bar")
+    testArgs("bar 5 foo bar 5 f", s"$myObjName1")
+    testArgs("bar 5 foo bar 5 ba", s"$myObjName2 $myObjName3")
+    testArgs("bar 5 foo bar 5 ", s"$myObjName1 $myObjName2 $myObjName3")
+    noSuggestions[SuggestionArg2]("bar 5 foo bar 5 foo")
   }
 
   case class MyArg3(foo: Int, bar: String, baz: Double)

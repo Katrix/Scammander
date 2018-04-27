@@ -19,7 +19,7 @@ class ScammanderSpec
 
   override protected def tabExtraToRunExtra(extra: Unit): Unit = ()
 
-  override implicit def F: MonadError[Either[NonEmptyList[CommandFailure], ?], NonEmptyList[CommandFailure]] =
+  override implicit def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
     cats.instances.either.catsStdInstancesForEither
 
   case class MyObj(name: String, i: Int)
@@ -46,7 +46,7 @@ class ScammanderSpec
     parsed.map(_._2).toOption
   }
 
-  def error[A](arguments: String)(implicit param: Parameter[A]): NonEmptyList[CommandFailure] = {
+  def error[A](arguments: String)(implicit param: Parameter[A]): CommandFailureNEL = {
     val parsed = param.parse((), ()).run(mkArgs(arguments))
     assert(parsed.isLeft)
     parsed.left.get
@@ -67,11 +67,16 @@ class ScammanderSpec
   def suggestions[A](arguments: String)(implicit param: Parameter[A]): Seq[String] = {
     val either = param.suggestions((), ()).run(mkArgs(arguments))
     assert(either.isRight)
-    either.right.get._2.getOrElse(Nil)
+    either.right.get._2
   }
 
   def noSuggestions[A](arguments: String)(implicit param: Parameter[A]): Assertion = {
-    val either = param.suggestions((), ()).run(mkArgs(arguments)).map(_._2.getOrElse(Nil))
-    assert(either.isLeft || either.contains(Nil))
+    val either = param.suggestions((), ()).run(mkArgs(arguments)).map(_._2)
+    assert(either.contains(Nil))
+  }
+
+  def errorSuggestions[A](arguments: String)(implicit param: Parameter[A]): Assertion = {
+    val either = param.suggestions((), ()).run(mkArgs(arguments)).map(_._2)
+    assert(either.isLeft)
   }
 }
