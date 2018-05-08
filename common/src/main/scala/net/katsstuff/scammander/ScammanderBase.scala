@@ -462,7 +462,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       }
 
     override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
-      SF.pure(Nil)
+      ScammanderHelper.dropFirstArg
 
     override def usage(source: RootSender): F[String] = "".pure
   }
