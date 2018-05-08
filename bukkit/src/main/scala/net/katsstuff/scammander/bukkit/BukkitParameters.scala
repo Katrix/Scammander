@@ -8,7 +8,7 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, OfflinePlayer, World}
 
-import cats.data.{NonEmptyList, StateT}
+import cats.data.NonEmptyList
 import cats.syntax.all._
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import net.katsstuff.scammander
@@ -45,21 +45,20 @@ trait BukkitParameters {
 
       val perm: String = w.value
 
+      def permError[B](pos: Int): CommandStep[B] =
+        Command.usageErrorF[B]("You do not have the permissions needed to use this parameter", pos)
+
       override def parse(
           source: CommandSender,
           extra: BukkitExtra,
-      ): StateT[CommandStep, List[RawCmdArg], NeedPermission[S, A]] =
-        if (source.hasPermission(perm))
-          param.parse(source, extra).map(NeedPermission.apply)
-        else
-          ScammanderHelper.getPos.flatMapF { pos =>
-            Command.usageErrorF("You do not have the permissions needed to use this parameter", pos)
-          }
+      ): SF[NeedPermission[S, A]] =
+        if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
+        else ScammanderHelper.getPos.flatMapF(permError)
 
       override def suggestions(
           source: CommandSender,
           extra: BukkitExtra
-      ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
+      ): SF[Seq[String]] =
         if (source.hasPermission(perm)) super.suggestions(source, extra)
         else ScammanderHelper.dropFirstArg[CommandStep]
     }
@@ -69,7 +68,7 @@ trait BukkitParameters {
 
   implicit val playerParam: Parameter[Player] = new ProxyParameter[Player, OnlyOne[Player]] {
     override def param: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
-    override def parse(source: CommandSender, extra: BukkitExtra): StateT[CommandStep, List[RawCmdArg], Player] =
+    override def parse(source: CommandSender, extra: BukkitExtra): SF[Player] =
       param.parse(source, extra).map(_.value)
   }
 
@@ -81,11 +80,9 @@ trait BukkitParameters {
     override def parse(
         source: CommandSender,
         extra: BukkitExtra
-    ): StateT[CommandStep, List[RawCmdArg], Set[OfflinePlayer]] = {
-      val players: StateT[CommandStep, List[RawCmdArg], Set[OfflinePlayer]] =
-        allPlayerParam.parse(source, extra).map(_.map(p => p: OfflinePlayer))
-      lazy val users: StateT[CommandStep, List[RawCmdArg], Set[OfflinePlayer]] =
-        ScammanderHelper.parseMany(name, Bukkit.getOfflinePlayers)
+    ): SF[Set[OfflinePlayer]] = {
+      val players: SF[Set[OfflinePlayer]]    = allPlayerParam.parse(source, extra).map(_.map(p => p: OfflinePlayer))
+      lazy val users: SF[Set[OfflinePlayer]] = ScammanderHelper.parseMany(name, Bukkit.getOfflinePlayers)
 
       ScammanderHelper.withFallbackState(players, users)
     }
@@ -93,7 +90,7 @@ trait BukkitParameters {
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = {
+    ): SF[Seq[String]] = {
       val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
         val res = Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(arg.content))
         if (res) true.pure else Command.errorF("Not parsed")
@@ -111,7 +108,7 @@ trait BukkitParameters {
     override def parse(
         source: CommandSender,
         extra: BukkitExtra
-    ): StateT[CommandStep, List[RawCmdArg], BukkitVector] = {
+    ): SF[BukkitVector] = {
       val relative = source match {
         case entity: Entity                  => Some(entity.getLocation)
         case blockSender: BlockCommandSender => Some(blockSender.getBlock.getLocation)
@@ -119,47 +116,49 @@ trait BukkitParameters {
       }
 
       for {
-        x <- parseRelativeDouble(source, extra, relative.map(_.getX))
-        y <- parseRelativeDouble(source, extra, relative.map(_.getY))
-        z <- parseRelativeDouble(source, extra, relative.map(_.getZ))
+        x <- parseRelativeOrNormal(source, extra, relative.map(_.getX))
+        y <- parseRelativeOrNormal(source, extra, relative.map(_.getY))
+        z <- parseRelativeOrNormal(source, extra, relative.map(_.getZ))
       } yield new BukkitVector(x, y, z)
     }
 
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
+    ): SF[Seq[String]] =
       ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg
 
-    private def parseRelativeDouble(
+    private def hasNoPosError(pos: Int): NonEmptyList[CommandUsageError] =
+      Command.usageErrorNel("Relative position specified but source does not have a position", pos)
+
+    private def parseRelative(
+        source: CommandSender,
+        extra: BukkitExtra,
+        relativeToOpt: Option[Double],
+        arg: RawCmdArg
+    ): SF[Double] =
+      Command
+        .liftFtoSF(relativeToOpt.toRight(hasNoPosError(arg.start)))
+        .flatMap { relativeTo =>
+          val newArg = arg.content.substring(1)
+          if (newArg.isEmpty) SF.pure(relativeTo)
+          else
+            doubleParam
+              .parse(source, extra)
+              .contramap[List[RawCmdArg]](xs => xs.headOption.fold(xs)(head => head.copy(content = newArg) :: xs.tail))
+              .map(_ + relativeTo)
+        }
+
+    private def parseRelativeOrNormal(
         source: CommandSender,
         extra: BukkitExtra,
         relativeToOpt: Option[Double]
-    ): StateT[CommandStep, List[RawCmdArg], Double] =
+    ): SF[Double] =
       for {
         arg <- ScammanderHelper.firstArg[CommandStep]
         res <- {
-          if (arg.content.startsWith("~")) {
-            Command
-              .liftFtoSF(
-                relativeToOpt.toRight(
-                  Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
-                )
-              )
-              .flatMap { relativeTo =>
-                val newArg = arg.content.substring(1)
-                if (newArg.isEmpty) SF.pure(relativeTo)
-                else {
-                  doubleParam
-                    .parse(source, extra)
-                    .contramap[List[RawCmdArg]](
-                      xs => xs.headOption.fold(xs)(head => head.copy(content = newArg) :: xs.tail)
-                    )
-                    .map(_ + relativeTo)
-                }
-              }
-
-          } else doubleParam.parse(source, extra)
+          if (arg.content.startsWith("~")) parseRelative(source, extra, relativeToOpt, arg)
+          else doubleParam.parse(source, extra)
         }
       } yield res
   }
