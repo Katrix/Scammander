@@ -26,10 +26,15 @@ import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util.{Locale, UUID}
 
 import scala.language.higherKinds
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+
+  private def tryToEither[B](tried: Try[B]): Either[Throwable, B] = tried match {
+    case Success(b) => Right(b)
+    case Failure(e) => Left(e)
+  }
 
   def primitiveParam[A](parName: String, s: String => A): Parameter[A] = new Parameter[A] {
     override val name: String = parName
@@ -38,7 +43,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- Command.liftEitherToSF(
-          Try(s(arg.content)).toEither.left
+          tryToEither(Try(s(arg.content))).left
             .map(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
         )
       } yield res
@@ -80,15 +85,15 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- Command.liftEitherToSF(
-          Try(new URL(arg.content))
-            .flatMap { url =>
-              Try {
-                url.toURI //Checks validity
-                url
+          tryToEither(
+            Try(new URL(arg.content))
+              .flatMap { url =>
+                Try {
+                  url.toURI //Checks validity
+                  url
+                }
               }
-            }
-            .toEither
-            .left
+          ).left
             .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
         )
       } yield res
@@ -110,17 +115,17 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- Command.liftEitherToSF(
-          Try(LocalDateTime.parse(arg.content))
-            .recoverWith {
-              case _: DateTimeParseException =>
-                Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg.content)))
-            }
-            .recoverWith {
-              case _: DateTimeParseException =>
-                Try(LocalDateTime.of(LocalDate.parse(arg.content), LocalTime.MIDNIGHT))
-            }
-            .toEither
-            .left
+          tryToEither(
+            Try(LocalDateTime.parse(arg.content))
+              .recoverWith {
+                case _: DateTimeParseException =>
+                  Try(LocalDateTime.of(LocalDate.now, LocalTime.parse(arg.content)))
+              }
+              .recoverWith {
+                case _: DateTimeParseException =>
+                  Try(LocalDateTime.of(LocalDate.parse(arg.content), LocalTime.MIDNIGHT))
+              }
+          ).left
             .map(_ => Command.syntaxErrorNel("Invalid date-time!", arg.start))
         )
       } yield res
@@ -155,7 +160,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           } else s
 
           Command.liftEitherToSF(
-            Try(Duration.parse(usedS)).toEither.left
+            tryToEither(Try(Duration.parse(usedS))).left
               .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
           )
         }

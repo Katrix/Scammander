@@ -39,29 +39,28 @@ trait BukkitParameters {
   implicit def needPermissionParam[S <: String, A](
       implicit param0: Parameter[A],
       w: Witness.Aux[S]
-  ): Parameter[NeedPermission[S, A]] =
-    new ProxyParameter[NeedPermission[S, A], A] {
-      override def param: Parameter[A] = param0
+  ): Parameter[NeedPermission[S, A]] = new ProxyParameter[NeedPermission[S, A], A] {
+    override def param: Parameter[A] = param0
 
-      val perm: String = w.value
+    val perm: String = w.value
 
-      def permError[B](pos: Int): CommandStep[B] =
-        Command.usageErrorF[B]("You do not have the permissions needed to use this parameter", pos)
+    def permError[B](pos: Int): CommandStep[B] =
+      Command.usageErrorF[B]("You do not have the permissions needed to use this parameter", pos)
 
-      override def parse(
-          source: CommandSender,
-          extra: BukkitExtra,
-      ): SF[NeedPermission[S, A]] =
-        if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
-        else ScammanderHelper.getPos.flatMapF(permError)
+    override def parse(
+        source: CommandSender,
+        extra: BukkitExtra
+    ): SF[NeedPermission[S, A]] =
+      if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
+      else ScammanderHelper.getPos.flatMapF(permError)
 
-      override def suggestions(
-          source: CommandSender,
-          extra: BukkitExtra
-      ): SF[Seq[String]] =
-        if (source.hasPermission(perm)) super.suggestions(source, extra)
-        else ScammanderHelper.dropFirstArg[CommandStep]
-    }
+    override def suggestions(
+        source: CommandSender,
+        extra: BukkitExtra
+    ): SF[Seq[String]] =
+      if (source.hasPermission(perm)) super.suggestions(source, extra)
+      else ScammanderHelper.dropFirstArg[CommandStep]
+  }
 
   //TODO: Selector with NMS
   implicit val allPlayerParam: Parameter[Set[Player]] = Parameter.mkNamed("player", Bukkit.getOnlinePlayers.asScala)

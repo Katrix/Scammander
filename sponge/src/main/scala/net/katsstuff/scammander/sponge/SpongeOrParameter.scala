@@ -9,6 +9,7 @@ import scala.collection.JavaConverters._
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
 import cats.data.{NonEmptyList, StateT}
+import cats.syntax.either._
 import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
 import net.katsstuff.scammander
 import shapeless._

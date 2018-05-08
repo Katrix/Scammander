@@ -7,7 +7,7 @@ import java.util.concurrent.Callable
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.util.Try
+import scala.util.{Failure, Success, Try}
 
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.data.DataContainer
@@ -54,6 +54,11 @@ trait SpongeParameter {
   implicit val worldHasName: HasName[WorldProperties]           = HasName.instance((a: WorldProperties) => a.getWorldName)
   implicit def catalogTypeHasName[A <: CatalogType]: HasName[A] = HasName.instance((a: A) => a.getId)
   implicit val pluginHasName: HasName[PluginContainer]          = HasName.instance((a: PluginContainer) => a.getId)
+
+  private def tryToEither[B](tried: Try[B]): Either[Throwable, B] = tried match {
+    case Success(b) => Right(b)
+    case Failure(e) => Left(e)
+  }
 
   /**
     * A class to use for parameter that should require a specific permission.
@@ -331,9 +336,9 @@ trait SpongeParameter {
 
     override def parse(source: CommandSource, extra: Unit): SF[InetAddress] = {
       val fromIp = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
-        Try {
+        tryToEither(Try {
           InetAddress.getByName(arg.content)
-        }.toEither.left.map(e => Command.usageErrorNel(e.getMessage, arg.start))
+        }).left.map(e => Command.usageErrorNel(e.getMessage, arg.start))
       }
       val fromPlayer = playerParam.parse(source, extra).map(_.getConnection.getAddress.getAddress)
 
@@ -361,7 +366,7 @@ trait SpongeParameter {
           val loader = HoconConfigurationLoader.builder.setSource(reader).build
 
           Command.liftEitherToSF(
-            Try(DataTranslators.CONFIGURATION_NODE.translate(loader.load())).toEither.left.map { e =>
+            tryToEither(Try(DataTranslators.CONFIGURATION_NODE.translate(loader.load()))).left.map { e =>
               Command.syntaxErrorNel(e.getMessage, pos)
             }
           )

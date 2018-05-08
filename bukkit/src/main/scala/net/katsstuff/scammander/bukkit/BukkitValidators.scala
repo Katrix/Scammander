@@ -12,6 +12,8 @@ import net.katsstuff.scammander.ScammanderBase
 import net.katsstuff.scammander
 import shapeless.{TypeCase, Typeable}
 
+import cats.syntax.either._
+
 trait BukkitValidators {
   self: ScammanderBase[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] =>
 
