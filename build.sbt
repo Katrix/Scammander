@@ -60,6 +60,7 @@ lazy val sponge =
     .settings(
       commonSettings,
       publishSettings,
+      spongeMetaCreate := false,
       name := s"scammanderSponge",
       moduleName := s"${name.value}_sponge${spongeApiVersion.value.dropRight(2)}",
       version := scammanderVersion
