@@ -30,19 +30,19 @@ lazy val publishSettings = Seq(
   licenses := Seq("MIT" -> url("http://opensource.org/licenses/MIT")),
   scmInfo := Some(
     ScmInfo(
-      url("https://github.com/Katrix-/Scammander"),
-      "scm:git:github.com/Katrix-/Scammander",
-      Some("scm:git:github.com/Katrix-/Scammander")
+      url("https://github.com/Katrix/Scammander"),
+      "scm:git:github.com/Katrix/Scammander",
+      Some("scm:git:github.com/Katrix/Scammander")
     )
   ),
-  homepage := Some(url("https://github.com/Katrix-/Scammander")),
+  homepage := Some(url("https://github.com/Katrix/Scammander")),
   developers := List(Developer("Katrix", "Nikolai Frid", "katrix97@hotmail.com", url("http://katsstuff.net/"))),
   autoAPIMappings := true
 )
 
 lazy val noPublishSettings = Seq(publish := {}, publishLocal := {}, publishArtifact := false)
 
-lazy val scammanderVersion = "0.3"
+lazy val scammanderVersion = "0.4"
 
 lazy val common = project.settings(
   commonSettings,
