@@ -20,6 +20,8 @@
  */
 package net.katsstuff.scammander
 
+import java.util.Locale
+
 import scala.language.higherKinds
 
 import cats.data.{NonEmptyList, StateT}
@@ -65,7 +67,32 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
       }
 
     override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-      ???
+      ScammanderHelper.getArgs[F].flatMap { xs =>
+        val matchingIndices = xs.zipWithIndex.collect {
+          case (RawCmdArg(_, _, content), idx)
+              if content.nonEmpty && flagName.startsWith(content.toLowerCase(Locale.ROOT)) =>
+            (content.equalsIgnoreCase(flagName), idx)
+        }
+
+        NonEmptyList
+          .fromList(matchingIndices)
+          .fold(SF.pure(Nil: Seq[String])) {
+            case NonEmptyList((false, _), Nil) =>
+              SF.pure(Seq(flagName))
+            case NonEmptyList((true, singleIdx), Nil) =>
+              val before = xs.take(singleIdx)
+              println(before)
+              flagParam
+                .suggestions(source, extra)
+                .contramap[List[RawCmdArg]] { ys =>
+                  println(ys)
+                  ys.drop(singleIdx + 1)
+                }
+                .modify(ys => before ::: ys)
+            case more =>
+              StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx._2))))
+          }
+      }
 
     override def usage(source: RootSender): F[String] = flagParam.usage(source).map(fUsage => s"$flagName $fUsage")
   }
@@ -78,7 +105,9 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
   case class BooleanFlag[Name <: String](present: Boolean)
   implicit def booleanFlagParameter[Name <: String](implicit witness: Witness.Aux[Name]): Parameter[BooleanFlag[Name]] =
     new Parameter[BooleanFlag[Name]] {
-      private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
+      private val flagName =
+        if (witness.value.size > 1) s"--${witness.value}".toLowerCase(Locale.ROOT)
+        else s"-${witness.value}".toLowerCase(Locale.ROOT)
 
       override val name: String = flagName
 
@@ -98,7 +127,22 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
         }
 
       override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-        ???
+        ScammanderHelper.getArgs[F].transformF { fa =>
+          fa.flatMap {
+            case (xs, _) =>
+              val matchingIndices = xs.zipWithIndex.collect {
+                case (RawCmdArg(_, _, content), idx)
+                    if content.nonEmpty && flagName.startsWith(content.toLowerCase(Locale.ROOT)) =>
+                  (content.equalsIgnoreCase(flagName), idx)
+              }
+
+              NonEmptyList.fromList(matchingIndices).fold(F.pure((xs, Nil: Seq[String]))) {
+                case NonEmptyList((false, singleIdx), Nil) => F.pure((xs, Seq(flagName)))
+                case NonEmptyList((true, singleIdx), Nil)  => F.pure((xs.patch(singleIdx, Nil, 1), Nil))
+                case more                                  => F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx._2)))
+              }
+          }
+        }
 
       override def usage(source: RootSender): F[String] = flagName.pure
     }

@@ -28,9 +28,10 @@ class FlagsParamSpec extends ScammanderSpec {
       suggestions[ValueFlag[W.`"long"`.T, OnlyOne[MyObj]]](args).mkString(" ") should equal(testAgainst)
 
     testArgs("-", "--long")
-    testArgs("--long", s"$myObjName1 $myObjName2 $myObjName3")
+    testArgs("--long ", s"$myObjName1 $myObjName2 $myObjName3")
     testArgs("--long f", s"$myObjName1")
     testArgs("--long ba", s"$myObjName2 $myObjName3")
+    noSuggestions[ValueFlag[W.`"long"`.T, OnlyOne[MyObj]]]("")
     noSuggestions[ValueFlag[W.`"long"`.T, OnlyOne[MyObj]]]("--long bar")
   }
 
@@ -53,8 +54,9 @@ class FlagsParamSpec extends ScammanderSpec {
     def testArgs(args: String, testAgainst: String) =
       suggestions[BooleanFlag[W.`"long"`.T]](args).mkString(" ") should equal(testAgainst)
 
-    testArgs("", "--long")
     testArgs("-", "--long")
+    testArgs("--l", "--long")
+    noSuggestions[BooleanFlag[W.`"long"`.T]]("")
     noSuggestions[BooleanFlag[W.`"long"`.T]]("--long")
   }
 
