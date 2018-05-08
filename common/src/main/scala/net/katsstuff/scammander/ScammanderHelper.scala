@@ -46,11 +46,11 @@ object ScammanderHelper {
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 
-  private[scammander] final class LiftFPartiallyApplied[State](val b: Boolean = true) extends AnyVal {
+  final private[scammander] class LiftFPartiallyApplied[State](val b: Boolean = true) extends AnyVal {
     def apply[F[_]: Applicative, A](value: F[A]): StateT[F, State, A] =
       StateT.liftF[F, State, A](value)
   }
-  private[scammander] final class LiftEitherPartiallyApplied[F[_], State](val b: Boolean = true) extends AnyVal {
+  final private[scammander] class LiftEitherPartiallyApplied[F[_], State](val b: Boolean = true) extends AnyVal {
     def apply[E, A](value: Either[E, A])(implicit F: MonadError[F, E]): StateT[F, State, A] =
       StateT.liftF[F, State, A](F.fromEither(value))
   }
@@ -140,7 +140,7 @@ object ScammanderHelper {
         }
         .toList
 
-      if(argumments.endsWith(" ")) xs :+ RawCmdArg(argumments.length - 1, argumments.length - 1, "") else xs
+      if (argumments.endsWith(" ")) xs :+ RawCmdArg(argumments.length - 1, argumments.length - 1, "") else xs
     }
   }
 
@@ -152,13 +152,13 @@ object ScammanderHelper {
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], Seq[String]] = {
     for {
-      xs     <- getArgs[F]
+      xs <- getArgs[F]
       parsed <- StateT.liftF {
         //There is no point in getting suggestions if there are no args
         if (xs == Nil) notEnoughArgsErrorF[F, Either[NonEmptyList[CommandFailure], (List[RawCmdArg], E)]]
         else F.attempt(parse.run(xs))
       }
-      _      <- StateT.set(parsed.map(_._1).getOrElse(Nil))
+      _ <- StateT.set(parsed.map(_._1).getOrElse(Nil))
     } yield {
       val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
       if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))

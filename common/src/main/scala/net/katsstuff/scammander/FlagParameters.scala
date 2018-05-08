@@ -41,7 +41,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
       flagParam: Parameter[A]
   ): Parameter[ValueFlag[Name, A]] =
     new Parameter[ValueFlag[Name, A]] {
-      private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
+      private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
       override def name: String = s"$flagName ${flagParam.name}"
 
       override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], ValueFlag[Name, A]] =
@@ -50,16 +50,19 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
             case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
           }
 
-          NonEmptyList.fromList(matchingIndices).fold[StateT[F, List[RawCmdArg], ValueFlag[Name, A]]](SF.pure(ValueFlag(None))) {
-            case NonEmptyList(singleIdx, Nil) =>
-              val before = xs.take(singleIdx)
-              flagParam
-                .parse(source, extra)
-                .contramap[List[RawCmdArg]](_.drop(singleIdx + 1))
-                .modify(ys => before ::: ys)
-                .map(a => ValueFlag(Some(a)))
-            case more => StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx))))
-          }
+          NonEmptyList
+            .fromList(matchingIndices)
+            .fold[StateT[F, List[RawCmdArg], ValueFlag[Name, A]]](SF.pure(ValueFlag(None))) {
+              case NonEmptyList(singleIdx, Nil) =>
+                val before = xs.take(singleIdx)
+                flagParam
+                  .parse(source, extra)
+                  .contramap[List[RawCmdArg]](_.drop(singleIdx + 1))
+                  .modify(ys => before ::: ys)
+                  .map(a => ValueFlag(Some(a)))
+              case more =>
+                StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx))))
+            }
         }
 
       override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
@@ -76,20 +79,21 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
   case class BooleanFlag[Name <: String](present: Boolean)
   implicit def booleanFlagParameter[Name <: String](implicit witness: Witness.Aux[Name]): Parameter[BooleanFlag[Name]] =
     new Parameter[BooleanFlag[Name]] {
-      private val flagName = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
+      private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
       override def name: String = flagName
 
       override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], BooleanFlag[Name]] =
         ScammanderHelper.getArgs[F].transformF { fa =>
-          fa.flatMap { case (xs, _) =>
-            val matchingIndices = xs.zipWithIndex.collect {
-              case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
-            }
+          fa.flatMap {
+            case (xs, _) =>
+              val matchingIndices = xs.zipWithIndex.collect {
+                case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
+              }
 
-            NonEmptyList.fromList(matchingIndices).fold(F.pure((xs, BooleanFlag[Name](present = false)))) {
-              case NonEmptyList(singleIdx, Nil) => F.pure((xs.patch(singleIdx, Nil, 1), BooleanFlag(true)))
-              case more => F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx)))
-            }
+              NonEmptyList.fromList(matchingIndices).fold(F.pure((xs, BooleanFlag[Name](present = false)))) {
+                case NonEmptyList(singleIdx, Nil) => F.pure((xs.patch(singleIdx, Nil, 1), BooleanFlag(true)))
+                case more                         => F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx)))
+              }
           }
         }
 

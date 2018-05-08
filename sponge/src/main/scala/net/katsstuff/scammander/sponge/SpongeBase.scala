@@ -54,7 +54,7 @@ trait SpongeBase
 
   override protected def tabExtraToRunExtra(extra: Location[World]): Unit = ()
 
-  override implicit def F: MonadError[CommandStep, NonEmptyList[CommandFailure]] =
+  implicit override def F: MonadError[CommandStep, NonEmptyList[CommandFailure]] =
     cats.instances.either.catsStdInstancesForEither
 
   /**
@@ -69,7 +69,7 @@ trait SpongeBase
     */
   object Permission {
     def apply(perm: String): Some[String] = Some(perm)
-    val none:                None.type    = None
+    val none: None.type                   = None
   }
 
   /**
@@ -77,8 +77,8 @@ trait SpongeBase
     */
   object Help {
     def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
-    def apply(text: Text):               CommandSource => Option[Text] = _ => Some(text)
-    val none:                            CommandSource => None.type    = _ => None
+    def apply(text: Text): CommandSource => Option[Text]               = _ => Some(text)
+    val none: CommandSource => None.type                               = _ => None
   }
 
   /**
@@ -86,8 +86,8 @@ trait SpongeBase
     */
   object Description {
     def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
-    def apply(text: Text):               CommandSource => Option[Text] = _ => Some(text)
-    val none:                            CommandSource => None.type    = _ => None
+    def apply(text: Text): CommandSource => Option[Text]               = _ => Some(text)
+    val none: CommandSource => None.type                               = _ => None
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {

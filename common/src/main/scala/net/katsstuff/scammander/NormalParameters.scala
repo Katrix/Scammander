@@ -64,15 +64,15 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), possibleSuggestions())
     }
 
-  implicit val byteParam:   Parameter[Byte]    = primitiveParam("byte", _.toByte)
-  implicit val shortParam:  Parameter[Short]   = primitiveParam("short", _.toShort)
-  implicit val intParam:    Parameter[Int]     = primitiveParam("int", _.toInt)
-  implicit val longParam:   Parameter[Long]    = primitiveParam("long", _.toLong)
-  implicit val floatParam:  Parameter[Float]   = primitiveParam("float", _.toFloat)
-  implicit val doubleParam: Parameter[Double]  = primitiveParam("double", _.toDouble)
-  implicit val boolParam:   Parameter[Boolean] = primitiveParam("boolean", _.toBoolean)
-  implicit val stringParam: Parameter[String]  = primitiveParam("string", identity)
-  implicit val unitParam:   Parameter[Unit]    = primitiveParam("", _ => ())
+  implicit val byteParam: Parameter[Byte]     = primitiveParam("byte", _.toByte)
+  implicit val shortParam: Parameter[Short]   = primitiveParam("short", _.toShort)
+  implicit val intParam: Parameter[Int]       = primitiveParam("int", _.toInt)
+  implicit val longParam: Parameter[Long]     = primitiveParam("long", _.toLong)
+  implicit val floatParam: Parameter[Float]   = primitiveParam("float", _.toFloat)
+  implicit val doubleParam: Parameter[Double] = primitiveParam("double", _.toDouble)
+  implicit val boolParam: Parameter[Boolean]  = primitiveParam("boolean", _.toBoolean)
+  implicit val stringParam: Parameter[String] = primitiveParam("string", identity)
+  implicit val unitParam: Parameter[Unit]     = primitiveParam("", _ => ())
 
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
     override def name: String = "url"
@@ -99,7 +99,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   }
 
   implicit val bigDecimalParam: Parameter[BigDecimal] = primitiveParam("decimal number", BigDecimal.apply)
-  implicit val bigIntParam:     Parameter[BigInt]     = primitiveParam("integer number", BigInt.apply)
+  implicit val bigIntParam: Parameter[BigInt]         = primitiveParam("integer number", BigInt.apply)
 
   implicit val uuidParam: Parameter[UUID] = primitiveParam("uuid", UUID.fromString)
 

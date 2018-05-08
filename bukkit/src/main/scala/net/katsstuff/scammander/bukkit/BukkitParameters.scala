@@ -24,10 +24,10 @@ trait BukkitParameters {
       BukkitExtra
     ] =>
 
-  implicit val playerHasName:        HasName[Player]        = HasName.instance((a: Player) => a.getName)
+  implicit val playerHasName: HasName[Player]               = HasName.instance((a: Player) => a.getName)
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = HasName.instance((a: OfflinePlayer) => a.getName)
-  implicit val worldHasName:         HasName[World]         = HasName.instance((a: World) => a.getName)
-  implicit val pluginHasName:        HasName[Plugin]        = HasName.instance((a: Plugin) => a.getName)
+  implicit val worldHasName: HasName[World]                 = HasName.instance((a: World) => a.getName)
+  implicit val pluginHasName: HasName[Plugin]               = HasName.instance((a: Plugin) => a.getName)
 
   type CommandStep[A] = Either[CommandFailureNEL, A]
 

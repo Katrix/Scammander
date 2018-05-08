@@ -50,10 +50,10 @@ trait SpongeParameter {
     ]
     with SpongeValidators =>
 
-  implicit val playerHasName:                        HasName[Player]          = HasName.instance((a: Player) => a.getName)
-  implicit val worldHasName:                         HasName[WorldProperties] = HasName.instance((a: WorldProperties) => a.getWorldName)
-  implicit def catalogTypeHasName[A <: CatalogType]: HasName[A]               = HasName.instance((a: A) => a.getId)
-  implicit val pluginHasName:                        HasName[PluginContainer] = HasName.instance((a: PluginContainer) => a.getId)
+  implicit val playerHasName: HasName[Player]                   = HasName.instance((a: Player) => a.getName)
+  implicit val worldHasName: HasName[WorldProperties]           = HasName.instance((a: WorldProperties) => a.getWorldName)
+  implicit def catalogTypeHasName[A <: CatalogType]: HasName[A] = HasName.instance((a: A) => a.getId)
+  implicit val pluginHasName: HasName[PluginContainer]          = HasName.instance((a: PluginContainer) => a.getId)
 
   /**
     * A class to use for parameter that should require a specific permission.
@@ -159,16 +159,15 @@ trait SpongeParameter {
     override def suggestions(
         source: CommandSource,
         extra: Location[World]
-    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] = {
+    ): StateT[CommandStep, List[RawCmdArg], Seq[String]] =
       ScammanderHelper.firstArgOpt.flatMap {
         case Some(arg) => ScammanderHelper.suggestions(parse(source, ()), Selector.complete(arg.content).asScala)
         case None      => ScammanderHelper.dropFirstArg
       }
-    }
   }
 
   implicit val userParam: Parameter[Set[User]] = new Parameter[Set[User]] {
-    private val userStorage = Sponge.getServiceManager.provideUnchecked(classOf[UserStorageService])
+    private val userStorage   = Sponge.getServiceManager.provideUnchecked(classOf[UserStorageService])
     override def name: String = "user"
     override def parse(source: CommandSource, extra: Unit): StateT[CommandStep, List[RawCmdArg], Set[User]] = {
       val players = allPlayerParam.parse(source, extra).map(_.map(player => player: User))

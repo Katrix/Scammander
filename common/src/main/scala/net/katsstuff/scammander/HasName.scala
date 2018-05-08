@@ -31,8 +31,8 @@ trait HasName[A] {
   def apply(a: A): String
 }
 object HasName {
-  def apply[A](obj: A)(implicit hasName: HasName[A]): String     = hasName(obj)
-  def apply[A](implicit hasName: HasName[A]):         HasName[A] = hasName
+  def apply[A](obj: A)(implicit hasName: HasName[A]): String = hasName(obj)
+  def apply[A](implicit hasName: HasName[A]): HasName[A]     = hasName
 
   //noinspection ConvertExpressionToSAM
   def instance[A](f: A => String): HasName[A] = new HasName[A] {

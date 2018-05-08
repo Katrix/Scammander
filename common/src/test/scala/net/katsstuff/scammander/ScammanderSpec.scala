@@ -19,18 +19,18 @@ class ScammanderSpec
 
   override protected def tabExtraToRunExtra(extra: Unit): Unit = ()
 
-  override implicit def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
+  implicit override def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
     cats.instances.either.catsStdInstancesForEither
 
   case class MyObj(name: String, i: Int)
 
-  val myObjName1 = "foo"
-  val myObjName2 = "bar"
-  val myObjName3 = "baz"
+  val myObjName1             = "foo"
+  val myObjName2             = "bar"
+  val myObjName3             = "baz"
   val myObjects: List[MyObj] = List(MyObj(myObjName1, 1), MyObj(myObjName2, 2), MyObj(myObjName3, 3))
 
-  implicit val myObjHasName: HasName[MyObj]        = (a: MyObj) => a.name
-  implicit val myObjparam:   Parameter[Set[MyObj]] = Parameter.mkNamed("myobj", myObjects)
+  implicit val myObjHasName: HasName[MyObj]      = (a: MyObj) => a.name
+  implicit val myObjparam: Parameter[Set[MyObj]] = Parameter.mkNamed("myobj", myObjects)
 
   def mkArgs(arguments: String): List[RawCmdArg] = ScammanderHelper.stringToRawArgsQuoted(arguments)
 

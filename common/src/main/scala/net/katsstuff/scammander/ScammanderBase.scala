@@ -83,7 +83,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   //Results and steps
 
-  type CommandFailure = scammander.CommandFailure
+  type CommandFailure    = scammander.CommandFailure
   type CommandFailureNEL = NonEmptyList[CommandFailure]
 
   type CommandError = scammander.CommandError

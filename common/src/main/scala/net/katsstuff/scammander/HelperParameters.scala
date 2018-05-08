@@ -62,8 +62,8 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
     * Parses the remaining arguments as a single string.
     */
   case class RemainingAsString(string: String) {
-    override def toString:               String  = string
-    override def hashCode():             Int     = string.hashCode
+    override def toString: String                = string
+    override def hashCode(): Int                 = string.hashCode
     override def equals(obj: scala.Any): Boolean = string.equals(obj)
   }
 

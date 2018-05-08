@@ -78,7 +78,7 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
       override def name: String = s"${hParam.value.name}|${tParam.value.name}"
 
       override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], H :+: T] = {
-        val hParse:      StateT[F, List[RawCmdArg], H :+: T] = hParam.value.parse(source, extra).map(Inl.apply)
+        val hParse: StateT[F, List[RawCmdArg], H :+: T]      = hParam.value.parse(source, extra).map(Inl.apply)
         lazy val tParse: StateT[F, List[RawCmdArg], H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
 
         ScammanderHelper.withFallbackState(hParse, tParse)

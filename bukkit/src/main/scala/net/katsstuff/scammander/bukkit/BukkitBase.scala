@@ -43,7 +43,7 @@ trait BukkitBase
 
   type CommandStep[A] = Either[CommandFailureNEL, A]
 
-  override implicit def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
+  implicit override def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
     cats.instances.either.catsStdInstancesForEither
 
   case class ChildCommandExtra[Sender, Param](
@@ -72,7 +72,7 @@ trait BukkitBase
     */
   object Permission {
     def apply(perm: String): Some[String] = Some(perm)
-    val none:                None.type    = None
+    val none: None.type                   = None
   }
 
   /**
@@ -80,8 +80,8 @@ trait BukkitBase
     */
   object Help {
     def apply(f: CommandSender => String): CommandSender => Option[String] = f andThen Some.apply
-    def apply(help: String):               CommandSender => Option[String] = _ => Some(help)
-    val none:                              CommandSender => None.type      = _ => None
+    def apply(help: String): CommandSender => Option[String]               = _ => Some(help)
+    val none: CommandSender => None.type                                   = _ => None
   }
 
   /**
@@ -89,8 +89,8 @@ trait BukkitBase
     */
   object Description {
     def apply(f: CommandSender => String): CommandSender => Option[String] = f andThen Some.apply
-    def apply(description: String):        CommandSender => Option[String] = _ => Some(description)
-    val none:                              CommandSender => None.type      = _ => None
+    def apply(description: String): CommandSender => Option[String]        = _ => Some(description)
+    val none: CommandSender => None.type                                   = _ => None
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
