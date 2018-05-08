@@ -101,7 +101,7 @@ trait SpongeOrParameter {
       for {
         pos <- ScammanderHelper.getPos
         res <- ScammanderHelper
-          .withFallbackState(parameter.parse(source, extra), Command.liftFStateParse(targeter.getTarget(source, pos)))
+          .withFallbackState(parameter.parse(source, extra), Command.liftFtoSF(targeter.getTarget(source, pos)))
       } yield Or(res)
 
     override def usage(source: CommandSource): CommandStep[String] = {

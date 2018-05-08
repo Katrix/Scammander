@@ -26,21 +26,28 @@ trait HelpCommands[F[_], RootSender, RunExtra, TabExtra] {
       private lazy val commandMap: Map[String, StaticChildCommand[_, _]] =
         commands.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
 
+      def getCommandOrError(
+          commandMap: Map[String, StaticChildCommand[_, _]],
+          acc: List[String],
+          name: String
+      ): F[(List[String], StaticChildCommand[_, _])] =
+        commandMap
+          .get(name)
+          .toF(s"No command named $name")
+          .map(cmd => (name :: acc) -> cmd)
+
       override def run(source: RootSender, extra: RunExtra, arg: ZeroOrMore[String]): F[CommandSuccess] =
         arg match {
           case ZeroOrMore(Nil) =>
             sendMultipleCommandHelp(title, source, commands)
           case ZeroOrMore(Seq(head, tail @ _*)) =>
-            val first = commandMap.get(head).toF(s"No command named $head").map(List(head) -> _)
+            val first = getCommandOrError(commandMap, Nil, head)
 
             val childCommandStep = first.flatMap { fst =>
               import cats.instances.list._
               Foldable[List].foldLeftM[F, String, (List[String], StaticChildCommand[_, _])](tail.toList, fst) {
-                case ((acc, command), child) =>
-                  command.command.childrenMap
-                    .get(child)
-                    .toF(s"No command named $child")
-                    .map(cmd => (child :: acc) -> cmd)
+                case ((acc, wrapper), child) =>
+                  getCommandOrError(wrapper.command.childrenMap, acc, child)
               }
             }
 

@@ -25,7 +25,7 @@ import java.util.Locale
 import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
-import cats.{Monad, MonadError}
+import cats.{Monad, MonadError, ~>}
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import net.katsstuff.scammander
@@ -37,6 +37,8 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   type SF[A] = StateT[F, List[RawCmdArg], A]
   def SF: Monad[SF] = Monad[SF]
+
+  val FtoSF: F ~> SF = StateT.liftK[F, List[RawCmdArg]]
 
   protected type Result
   protected type StaticChildCommand[Sender, Param] <: SharedStaticChildCommand[Sender, Param]
@@ -125,9 +127,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Create a simple command from a function that takes a parameter of the given type.
       */
-    def simple[Param](
+    def simple[Param: Parameter](
         runCmd: (RootSender, RunExtra, Param) => F[CommandSuccess]
-    )(implicit parameter: Parameter[Param]): Command[RootSender, Param] =
+    ): Command[RootSender, Param] =
       new Command[RootSender, Param] {
         override def run(source: RootSender, extra: RunExtra, arg: Param): F[CommandSuccess] =
           runCmd(source, extra, arg)
@@ -136,9 +138,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Create a command from a function that takes a parameter and sender of the given types.
       */
-    def withSender[Sender, Param](
+    def withSender[Sender: UserValidator, Param: Parameter](
         runCmd: (Sender, RunExtra, Param) => F[CommandSuccess]
-    )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
+    ): Command[Sender, Param] =
       new Command[Sender, Param] {
         override def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess] =
           runCmd(source, extra, arg)
@@ -148,9 +150,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       * Create a simple command with children from a function that takes a
       * parameter of the given type.
       */
-    def withChildren[Param](childSet: Set[ChildCommand[_, _]])(
+    def withChildren[Param: Parameter](childSet: Set[ChildCommand[_, _]])(
         runCmd: (RootSender, RunExtra, Param) => F[CommandSuccess]
-    )(implicit parameter: Parameter[Param]): Command[RootSender, Param] = new Command[RootSender, Param] {
+    ): Command[RootSender, Param] = new Command[RootSender, Param] {
       override def run(source: RootSender, extra: RunExtra, arg: Param): F[CommandSuccess] =
         runCmd(source, extra, arg)
 
@@ -160,9 +162,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Create a command with children from a function that takes a parameter and sender of the given types.
       */
-    def withSenderAndChildren[Sender, Param](childSet: Set[ChildCommand[_, _]])(
+    def withSenderAndChildren[Sender: UserValidator, Param: Parameter](childSet: Set[ChildCommand[_, _]])(
         runCmd: (Sender, RunExtra, Param) => F[CommandSuccess]
-    )(implicit transformer: UserValidator[Sender], parameter: Parameter[Param]): Command[Sender, Param] =
+    ): Command[Sender, Param] =
       new Command[Sender, Param] {
         override def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess] =
           runCmd(source, extra, arg)
@@ -173,13 +175,12 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Lifts an value F[A] into the parser State.
       */
-    def liftFStateParse[A](fa: F[A]): SF[A] = ScammanderHelper.liftFStateParse(fa)
+    def liftFtoSF[A](fa: F[A]): SF[A] = FtoSF(fa)
 
     /**
       * Lifts an either value into the parser state.
       */
-    def liftEitherStateParse[A](value: Either[CommandFailureNEL, A]): SF[A] =
-      ScammanderHelper.liftEitherState[F, List[RawCmdArg]](value)
+    def liftEitherToSF[A](value: Either[CommandFailureNEL, A]): SF[A] = FtoSF(F.fromEither(value))
 
     /**
       * Creates a command success step.
@@ -191,19 +192,19 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       * Creates a generic command error step.
       */
     def errorState[A](msg: String, shouldShowUsage: Boolean = false): SF[A] =
-      liftFStateParse(errorF(msg, shouldShowUsage))
+      liftFtoSF(errorF(msg, shouldShowUsage))
 
     /**
       * Creates a syntax command error step.
       */
     def syntaxErrorState[A](msg: String, pos: Int): SF[A] =
-      liftFStateParse(syntaxErrorF(msg, pos))
+      liftFtoSF(syntaxErrorF(msg, pos))
 
     /**
       * Creates a usage  command error step.
       */
     def usageErrorState[A](msg: String, pos: Int): SF[A] =
-      liftFStateParse(usageErrorF(msg, pos))
+      liftFtoSF(usageErrorF(msg, pos))
 
     /**
       * Creates a generic command error step.
@@ -311,8 +312,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
     override def name: String = param.name
 
-    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-      param.suggestions(source, extra)
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = param.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = param.usage(source)
   }
@@ -327,7 +327,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       * @tparam A The type of parameter.
       */
     def mkNamed[A: HasName](paramName: String, choices: => Iterable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
-      override def name: String = paramName
+      override val name: String = paramName
 
       override def parse(source: RootSender, extra: RunExtra): SF[Set[A]] =
         ScammanderHelper.parseMany[F, A](name, choices)
@@ -354,12 +354,12 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), names)
 
-      override def usage(source: RootSender): F[String] = F.pure(name)
+      override def usage(source: RootSender): F[String] = name.pure
     }
 
     def choice[A](choiceName: String, choices: Map[String, A]): Parameter[Set[A]] = new Parameter[Set[A]] {
 
-      override def name: String = choices.keys.mkString("|")
+      override val name: String = choices.keys.mkString("|")
 
       override def parse(source: RootSender, extra: RunExtra): SF[Set[A]] =
         ScammanderHelper.parseMany[F, A](choiceName, choices)
@@ -376,7 +376,8 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       implicit paramParam: Parameter[A],
       witness: Witness.Aux[Name]
   ): Parameter[Named[Name, A]] = new ProxyParameter[Named[Name, A], A] {
-    override def name: String = witness.value
+
+    override val name: String = witness.value
 
     override def param: Parameter[A] = paramParam
 
@@ -426,7 +427,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     new Parameter[DynamicCommand[Args, Identifier, Sender, Param]] {
       private val dynamic = DynamicCommand(cmd.names, cmd.command, cmd.identifier, validator, parameter)
 
-      override def name: String = cmd.names.mkString("|")
+      override val name: String = cmd.names.mkString("|")
 
       override def parse(
           source: RootSender,
@@ -440,7 +441,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   implicit val rawCmdArgsParam: Parameter[List[RawCmdArg]] = new Parameter[List[RawCmdArg]] {
 
-    override def name: String = "raw..."
+    override val name: String = "raw..."
 
     override def parse(source: RootSender, extra: RunExtra): SF[List[RawCmdArg]] =
       ScammanderHelper.getArgs
@@ -453,7 +454,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
   object NotUsed extends NotUsed
   implicit val notUsedParam: Parameter[NotUsed] = new Parameter[NotUsed] {
 
-    override def name: String = ""
+    override val name: String = ""
 
     override def parse(source: RootSender, extra: RunExtra): SF[NotUsed] =
       ScammanderHelper.firstArgOpt[F].flatMapF { arg =>

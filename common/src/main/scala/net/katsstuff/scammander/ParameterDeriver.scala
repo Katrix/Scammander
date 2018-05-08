@@ -32,31 +32,30 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
   implicit def hConsParam[H, T <: HList](
       implicit hParam: Lazy[Parameter[H]],
       tParam: Lazy[Parameter[T]]
-  ): Parameter[H :: T] =
-    new Parameter[H :: T] {
-      override def name: String = s"${hParam.value.name} ${tParam.value.name}"
+  ): Parameter[H :: T] = new Parameter[H :: T] {
+    override def name: String = s"${hParam.value.name} ${tParam.value.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): SF[H :: T] =
-        for {
-          h <- hParam.value.parse(source, extra)
-          t <- tParam.value.parse(source, extra)
-        } yield h :: t
+    override def parse(source: RootSender, extra: RunExtra): SF[H :: T] =
+      for {
+        h <- hParam.value.parse(source, extra)
+        t <- tParam.value.parse(source, extra)
+      } yield h :: t
 
-      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-        ScammanderHelper.fallbackSuggestions(
-          hParam.value.suggestions(source, extra),
-          tParam.value.suggestions(source, extra)
-        )
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+      ScammanderHelper.fallbackSuggestions(
+        hParam.value.suggestions(source, extra),
+        tParam.value.suggestions(source, extra)
+      )
 
-      override def usage(source: RootSender): F[String] = {
-        lazy val hUsage = hParam.value.usage(source)
-        lazy val tUsage = tParam.value.usage(source)
+    override def usage(source: RootSender): F[String] = {
+      val hUsage = hParam.value.usage(source)
+      val tUsage = tParam.value.usage(source)
 
-        F.map2(hUsage, tUsage) { (h, t) =>
-          if (t.isEmpty) h else s"$h $t"
-        }
+      F.map2(hUsage, tUsage) { (h, t) =>
+        if (t.isEmpty) h else s"$h $t"
       }
     }
+  }
 
   implicit val hNilParam: Parameter[HNil] = new Parameter[HNil] {
     override def name: String = ""
@@ -92,8 +91,8 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
       }
 
       override def usage(source: RootSender): F[String] = {
-        lazy val hUsage = hParam.value.usage(source)
-        lazy val tUsage = tParam.value.usage(source)
+        val hUsage = hParam.value.usage(source)
+        val tUsage = tParam.value.usage(source)
 
         F.map2(hUsage, tUsage) { (h, t) =>
           if (t.isEmpty) h else s"$h|$t"

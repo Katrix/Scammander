@@ -141,7 +141,7 @@ trait BukkitParameters {
         res <- {
           if (arg.content.startsWith("~")) {
             Command
-              .liftFStateParse(
+              .liftFtoSF(
                 relativeToOpt.toRight(
                   Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )

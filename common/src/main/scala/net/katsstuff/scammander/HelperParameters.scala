@@ -91,7 +91,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
   object OneOrMore {
     implicit def oneOrMoreParam[A](implicit param: Parameter[A]): Parameter[OneOrMore[A]] =
       new Parameter[OneOrMore[A]] {
-        override def name: String = s"${param.name}..."
+        override val name: String = s"${param.name}..."
 
         override def parse(source: RootSender, extra: RunExtra): SF[OneOrMore[A]] = {
           import cats.instances.vector._
@@ -103,7 +103,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           res.flatMapF { vec =>
             NonEmptyList
               .fromList(vec.toList)
-              .fold[F[OneOrMore[A]]](Command.errorF("Not enough parsed"))(nel => F.pure(OneOrMore(nel)))
+              .fold[F[OneOrMore[A]]](Command.errorF("Not enough parsed"))(OneOrMore(_).pure[F])
           }
         }
 
@@ -126,7 +126,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
   object ZeroOrMore {
     implicit def zeroOrMoreParam[A](implicit param: Parameter[A]): Parameter[ZeroOrMore[A]] =
       new Parameter[ZeroOrMore[A]] {
-        override def name: String = s"${param.name}..."
+        override val name: String = s"${param.name}..."
 
         override def parse(source: RootSender, extra: RunExtra): SF[ZeroOrMore[A]] = {
           import cats.instances.vector._
@@ -159,7 +159,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
 
   implicit def optionParam[A](implicit param: Parameter[A]): Parameter[Option[A]] = new Parameter[Option[A]] {
 
-    override def name: String = param.name
+    override val name: String = param.name
 
     override def parse(source: RootSender, extra: RunExtra): SF[Option[A]] = {
       val parse = param.parse(source, extra).map[Option[A]](Some.apply)

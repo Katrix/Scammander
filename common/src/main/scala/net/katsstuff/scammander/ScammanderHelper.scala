@@ -25,7 +25,7 @@ import java.util.regex.Pattern
 
 import scala.language.higherKinds
 
-import cats.data.{IndexedStateT, NonEmptyList, StateT}
+import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import cats.{Applicative, MonadError}
 
@@ -46,21 +46,6 @@ object ScammanderHelper {
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
 
-  final private[scammander] class LiftFPartiallyApplied[State](val b: Boolean = true) extends AnyVal {
-    def apply[F[_]: Applicative, A](value: F[A]): StateT[F, State, A] =
-      StateT.liftF[F, State, A](value)
-  }
-  final private[scammander] class LiftEitherPartiallyApplied[F[_], State](val b: Boolean = true) extends AnyVal {
-    def apply[E, A](value: Either[E, A])(implicit F: MonadError[F, E]): StateT[F, State, A] =
-      StateT.liftF[F, State, A](F.fromEither(value))
-  }
-
-  def liftFState[State]: LiftFPartiallyApplied[State] = new LiftFPartiallyApplied[State]
-
-  def liftFStateParse[F[_]: Applicative, A](fa: F[A]): StateT[F, List[RawCmdArg], A] = liftFState[List[RawCmdArg]](fa)
-
-  def liftEitherState[F[_], State]: LiftEitherPartiallyApplied[F, State] = new LiftEitherPartiallyApplied[F, State]
-
   def dropFirstArg[F[_]](
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], Seq[String]] =
@@ -71,18 +56,17 @@ object ScammanderHelper {
       }
       .map(_ => Nil)
 
-  def getPos[F[_]: Applicative]: IndexedStateT[F, List[RawCmdArg], List[RawCmdArg], Int] =
+  def getPos[F[_]: Applicative]: StateT[F, List[RawCmdArg], Int] =
     StateT.inspect[F, List[RawCmdArg], Int](_.headOption.fold(-1)(_.start))
 
-  def getArgs[F[_]: Applicative]: StateT[F, List[RawCmdArg], List[RawCmdArg]] = StateT.get[F, List[RawCmdArg]]
+  def getArgs[F[_]: Applicative]: StateT[F, List[RawCmdArg], List[RawCmdArg]] =
+    StateT.get[F, List[RawCmdArg]]
 
   def firstArgOpt[F[_]: Applicative]: StateT[F, List[RawCmdArg], Option[RawCmdArg]] =
     StateT.inspect[F, List[RawCmdArg], Option[RawCmdArg]](_.headOption)
 
   def firstArg[F[_]](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], RawCmdArg] =
-    StateT.inspect[F, List[RawCmdArg], Option[RawCmdArg]](_.headOption).flatMapF { opt =>
-      opt.filter(_.content.nonEmpty).fold[F[RawCmdArg]](notEnoughArgsErrorF)(F.pure)
-    }
+    firstArgOpt[F].flatMapF(_.filter(_.content.nonEmpty).fold[F[RawCmdArg]](notEnoughArgsErrorF)(_.pure))
 
   def firstArgAndDrop[F[_]](
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
@@ -128,11 +112,11 @@ object ScammanderHelper {
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace
     * as as they are not quoted.
     */
-  def stringToRawArgsQuoted(argumments: String): List[RawCmdArg] = {
-    if (argumments.isEmpty) List(RawCmdArg(0, 0, ""))
+  def stringToRawArgsQuoted(arguments: String): List[RawCmdArg] = {
+    if (arguments.isEmpty) List(RawCmdArg(0, 0, ""))
     else {
       val xs = quotedRegex
-        .findAllMatchIn(argumments)
+        .findAllMatchIn(arguments)
         .map { m =>
           val quoted = m.group(1) != null
           val group  = if (quoted) 1 else 2
@@ -140,7 +124,7 @@ object ScammanderHelper {
         }
         .toList
 
-      if (argumments.endsWith(" ")) xs :+ RawCmdArg(argumments.length - 1, argumments.length - 1, "") else xs
+      if (arguments.endsWith(" ")) xs :+ RawCmdArg(arguments.length - 1, arguments.length - 1, "") else xs
     }
   }
 
@@ -187,7 +171,7 @@ object ScammanderHelper {
 
     for {
       arg <- firstArgAndDrop
-      res <- liftFStateParse(
+      res <- StateT.liftF(
         choices
           .get(arg.content.toLowerCase(Locale.ROOT))
           .fold[F[A]](
@@ -220,7 +204,7 @@ object ScammanderHelper {
 
     for {
       arg <- firstArgAndDrop
-      res <- liftFStateParse {
+      res <- StateT.liftF {
         val RawCmdArg(pos, _, unformattedPattern) = arg
 
         val pattern         = formattedPattern(unformattedPattern)

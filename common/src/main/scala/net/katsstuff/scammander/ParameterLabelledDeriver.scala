@@ -76,7 +76,7 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
 
       override def usage(source: RootSender): F[String] = {
         lazy val hUsage = hName.value.name
-        lazy val tUsage = tParam.value.usage(source)
+        val tUsage = tParam.value.usage(source)
 
         tUsage.map(t => if (t.isEmpty) s"<$hUsage>" else s"<$hUsage> $t")
       }
@@ -92,10 +92,8 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
       override def name: String = s"${hName.value.name}|${tParam.value.name}"
 
       override def parse(source: RootSender, extra: RunExtra): SF[FieldType[HK, HV] :+: T] = {
-        val hParse: SF[FieldType[HK, HV] :+: T] =
-          hParam.value.parse(source, extra).map(h => Inl(labelled.field[HK](h)))
-        lazy val tParse: SF[FieldType[HK, HV] :+: T] =
-          tParam.value.parse(source, extra).map(Inr.apply)
+        val hParse: SF[FieldType[HK, HV] :+: T]      = hParam.value.parse(source, extra).map(h => Inl(labelled.field[HK](h)))
+        lazy val tParse: SF[FieldType[HK, HV] :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
 
         ScammanderHelper.withFallbackState(hParse, tParse)
       }
@@ -108,8 +106,8 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
       }
 
       override def usage(source: RootSender): F[String] = {
-        lazy val hUsage = hParam.value.usage(source)
-        lazy val tUsage = tParam.value.usage(source)
+        val hUsage = hParam.value.usage(source)
+        val tUsage = tParam.value.usage(source)
 
         F.map2(hUsage, tUsage) { (h, t) =>
           if (t.isEmpty) s"($h)" else s"($h)|$t"

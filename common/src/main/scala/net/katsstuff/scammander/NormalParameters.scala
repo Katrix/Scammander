@@ -31,31 +31,31 @@ import scala.util.Try
 trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
 
-  def primitiveParam[A](parName: String, s: String => A): Parameter[A] =
-    new Parameter[A] {
-      override def name: String = parName
+  def primitiveParam[A](parName: String, s: String => A): Parameter[A] = new Parameter[A] {
+    override val name: String = parName
 
-      override def parse(source: RootSender, extra: RunExtra): SF[A] =
-        for {
-          arg <- ScammanderHelper.firstArgAndDrop[F]
-          res <- Command.liftEitherStateParse(
-            Try(s(arg.content)).toEither.left
-              .map(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
-          )
-        } yield res
+    override def parse(source: RootSender, extra: RunExtra): SF[A] =
+      for {
+        arg <- ScammanderHelper.firstArgAndDrop[F]
+        res <- Command.liftEitherToSF(
+          Try(s(arg.content)).toEither.left
+            .map(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
+        )
+      } yield res
 
-      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-        ScammanderHelper.dropFirstArg[F]
-    }
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+      ScammanderHelper.dropFirstArg[F]
+  }
 
   def mkSingle[A](parName: String, parser: String => F[A], possibleSuggestions: () => Seq[String]): Parameter[A] =
     new Parameter[A] {
-      override def name: String = parName
+
+      override val name: String = parName
 
       override def parse(source: RootSender, extra: RunExtra): SF[A] =
         for {
           arg <- ScammanderHelper.firstArgAndDrop[F]
-          res <- Command.liftFStateParse(parser(arg.content))
+          res <- Command.liftFtoSF(parser(arg.content))
         } yield res
 
       override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
@@ -73,12 +73,13 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   implicit val unitParam: Parameter[Unit]     = primitiveParam("", _ => ())
 
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
-    override def name: String = "url"
+
+    override val name: String = "url"
 
     override def parse(source: RootSender, extra: RunExtra): SF[URL] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- Command.liftEitherStateParse(
+        res <- Command.liftEitherToSF(
           Try(new URL(arg.content))
             .flatMap { url =>
               Try {
@@ -102,11 +103,13 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   implicit val uuidParam: Parameter[UUID] = primitiveParam("uuid", UUID.fromString)
 
   implicit val dateTimeParam: Parameter[LocalDateTime] = new Parameter[LocalDateTime] {
-    override def name: String = "dataTime"
+
+    override val name: String = "dataTime"
+
     override def parse(source: RootSender, extra: RunExtra): SF[LocalDateTime] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- Command.liftEitherStateParse(
+        res <- Command.liftEitherToSF(
           Try(LocalDateTime.parse(arg.content))
             .recoverWith {
               case _: DateTimeParseException =>
@@ -133,7 +136,9 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   }
 
   implicit val durationParam: Parameter[Duration] = new Parameter[Duration] {
-    override def name: String = "duration"
+
+    override val name: String = "duration"
+
     override def parse(source: RootSender, extra: RunExtra): SF[Duration] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
@@ -149,7 +154,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
             if (!s1.startsWith("P")) "P" + s1 else s1
           } else s
 
-          Command.liftEitherStateParse(
+          Command.liftEitherToSF(
             Try(Duration.parse(usedS)).toEither.left
               .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
           )

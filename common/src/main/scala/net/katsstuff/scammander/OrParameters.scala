@@ -47,18 +47,17 @@ trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
   implicit def orSource[Base](
       implicit parameter: Parameter[Base],
       validator: UserValidator[Base]
-  ): Parameter[OrSource[Base]] =
-    new ProxyParameter[OrSource[Base], Base] {
-      override def param: Parameter[Base] = parameter
+  ): Parameter[OrSource[Base]] = new ProxyParameter[OrSource[Base], Base] {
+    override def param: Parameter[Base] = parameter
 
-      override def parse(source: RootSender, extra: RunExtra): SF[OrSource[Base]] = {
-        val fa1: SF[Base]      = param.parse(source, extra)
-        lazy val fa2: SF[Base] = Command.liftFStateParse(validator.validate(source))
+    override def parse(source: RootSender, extra: RunExtra): SF[OrSource[Base]] = {
+      val fa1: SF[Base]      = param.parse(source, extra)
+      lazy val fa2: SF[Base] = Command.liftFtoSF(validator.validate(source))
 
-        ScammanderHelper.withFallbackState(fa1, fa2).map(Or.apply)
-      }
-
-      override def usage(source: RootSender): F[String] =
-        ScammanderHelper.withFallback(validator.validate(source).map(_ => s"[$name]"), super.usage(source))
+      ScammanderHelper.withFallbackState(fa1, fa2).map(Or.apply)
     }
+
+    override def usage(source: RootSender): F[String] =
+      ScammanderHelper.withFallback(validator.validate(source).map(_ => s"[$name]"), super.usage(source))
+  }
 }

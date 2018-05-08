@@ -230,7 +230,7 @@ trait SpongeParameter {
         res <- {
           if (arg.content.startsWith("~")) {
             Command
-              .liftEitherStateParse(
+              .liftEitherToSF(
                 relativeToOpt.toRight(
                   Command.usageErrorNel("Relative position specified but source does not have a position", arg.start)
                 )
@@ -276,7 +276,7 @@ trait SpongeParameter {
           .getOrElse {
             val worldfromParam = oneWorldParam.parse(source, extra)
             lazy val worldFromLoc =
-              Command.liftFStateParse(locationSender.validate(source).map(pos => OnlyOne(pos.getExtent.getProperties)))
+              Command.liftFtoSF(locationSender.validate(source).map(pos => OnlyOne(pos.getExtent.getProperties)))
 
             val parseWorld = ScammanderHelper.withFallbackState(worldfromParam, worldFromLoc)
 
@@ -362,7 +362,7 @@ trait SpongeParameter {
           }
           val loader = HoconConfigurationLoader.builder.setSource(reader).build
 
-          Command.liftEitherStateParse(
+          Command.liftEitherToSF(
             Try(DataTranslators.CONFIGURATION_NODE.translate(loader.load())).toEither.left.map { e =>
               Command.syntaxErrorNel(e.getMessage, pos)
             }

@@ -17,7 +17,9 @@ trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
   sealed trait Now
   type OrNow[Base] = Base Or Now
   implicit val dateTimeOrNowParam: Parameter[LocalDateTime Or Now] = new Parameter[LocalDateTime Or Now] {
-    override def name: String = dateTimeParam.name
+
+    override val name: String = dateTimeParam.name
+
     override def parse(source: RootSender, extra: RunExtra): SF[LocalDateTime Or Now] =
       ScammanderHelper
         .withFallbackState(dateTimeParam.parse(source, extra), SF.pure(LocalDateTime.now()))
