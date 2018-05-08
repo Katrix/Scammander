@@ -144,11 +144,16 @@ object ScammanderHelper {
       }
       _ <- StateT.set(parsed.map(_._1).getOrElse(Nil))
     } yield {
-      val startsWith = xs.headOption.map(head => choices.filter(_.startsWith(head.content)).toSeq)
-      if (startsWith.exists(_.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(xs.head.content))))
-        Nil
-      else
-        startsWith.getOrElse(choices.toSeq)
+      val content = xs.head.content
+
+      if(content.isEmpty) choices.toSeq
+      else {
+        val startsWith = choices.filter(_.startsWith(content)).toSeq
+        if (startsWith.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(content)))
+          Nil
+        else
+          startsWith
+      }
     }
   }
 
@@ -167,7 +172,7 @@ object ScammanderHelper {
   def parse[F[_], A](name: String, choices: Map[String, A])(
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], A] = {
-    assert(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
+    require(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
 
     for {
       arg <- firstArgAndDrop
