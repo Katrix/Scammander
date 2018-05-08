@@ -76,7 +76,7 @@ trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
 
       override def usage(source: RootSender): F[String] = {
         lazy val hUsage = hName.value.name
-        val tUsage = tParam.value.usage(source)
+        val tUsage      = tParam.value.usage(source)
 
         tUsage.map(t => if (t.isEmpty) s"<$hUsage>" else s"<$hUsage> $t")
       }

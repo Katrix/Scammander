@@ -4,8 +4,8 @@ import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.world.{Location, World}
 
 import cats.data.NonEmptyList
-import net.katsstuff.scammander.ScammanderBaseAll
 import net.katsstuff.scammander
+import net.katsstuff.scammander.ScammanderBaseAll
 
 trait SpongeBaseAll
     extends SpongeBase

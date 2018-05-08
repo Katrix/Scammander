@@ -12,8 +12,8 @@ import com.flowpowered.math.vector.Vector3d
 
 import cats.data.NonEmptyList
 import cats.syntax.either._
-import net.katsstuff.scammander.ScammanderBase
 import net.katsstuff.scammander
+import net.katsstuff.scammander.ScammanderBase
 import shapeless._
 
 trait SpongeValidators {

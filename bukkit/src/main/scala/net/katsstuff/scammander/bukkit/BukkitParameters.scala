@@ -10,8 +10,8 @@ import org.bukkit.{Bukkit, OfflinePlayer, World}
 
 import cats.data.NonEmptyList
 import cats.syntax.all._
-import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import net.katsstuff.scammander
+import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import shapeless.Witness
 
 trait BukkitParameters {

@@ -9,8 +9,8 @@ import org.spongepowered.api.text.format.TextStyles._
 import org.spongepowered.api.world.{Location, World}
 
 import cats.data.NonEmptyList
-import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters, ScammanderBase}
 import net.katsstuff.scammander
+import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters, ScammanderBase}
 
 trait SpongeHelpCommands
     extends HelpCommands[

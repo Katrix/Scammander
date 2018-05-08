@@ -3,8 +3,8 @@ package net.katsstuff.scammander.bukkit
 import org.bukkit.command.CommandSender
 
 import cats.data.NonEmptyList
-import net.katsstuff.scammander.ScammanderBaseAll
 import net.katsstuff.scammander
+import net.katsstuff.scammander.ScammanderBaseAll
 
 trait BukkitBaseAll
     extends BukkitBase

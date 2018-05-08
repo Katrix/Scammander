@@ -146,7 +146,7 @@ object ScammanderHelper {
     } yield {
       val content = xs.head.content
 
-      if(content.isEmpty) choices.toSeq
+      if (content.isEmpty) choices.toSeq
       else {
         val startsWith = choices.filter(_.startsWith(content)).toSeq
         if (startsWith.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(content)))

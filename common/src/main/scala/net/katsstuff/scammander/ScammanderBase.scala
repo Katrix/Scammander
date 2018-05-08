@@ -25,9 +25,9 @@ import java.util.Locale
 import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
-import cats.{Monad, MonadError, ~>}
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
+import cats.{Monad, MonadError, ~>}
 import net.katsstuff.scammander
 import shapeless._
 

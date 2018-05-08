@@ -2,17 +2,16 @@ package net.katsstuff.scammander.bukkit
 
 import java.net.InetAddress
 
-import org.bukkit.{Location, OfflinePlayer}
 import org.bukkit.command.{BlockCommandSender, CommandSender, ProxiedCommandSender}
 import org.bukkit.entity.{Entity, Player}
 import org.bukkit.util.{Vector => BukkitVector}
+import org.bukkit.{Location, OfflinePlayer}
 
 import cats.data.NonEmptyList
-import net.katsstuff.scammander.ScammanderBase
-import net.katsstuff.scammander
-import shapeless.{TypeCase, Typeable}
-
 import cats.syntax.either._
+import net.katsstuff.scammander
+import net.katsstuff.scammander.ScammanderBase
+import shapeless.{TypeCase, Typeable}
 
 trait BukkitValidators {
   self: ScammanderBase[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] =>

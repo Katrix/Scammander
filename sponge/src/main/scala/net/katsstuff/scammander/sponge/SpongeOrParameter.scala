@@ -1,17 +1,18 @@
 package net.katsstuff.scammander.sponge
 
+import scala.collection.JavaConverters._
+
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.entity.Entity
 import org.spongepowered.api.util.blockray.{BlockRay, BlockRayHit}
 import org.spongepowered.api.world.{Location, World}
-import scala.collection.JavaConverters._
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.either._
-import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
 import net.katsstuff.scammander
+import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
 import shapeless._
 
 trait SpongeOrParameter {
