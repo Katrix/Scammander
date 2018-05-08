@@ -44,7 +44,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
       private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
       override def name: String = s"$flagName ${flagParam.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], ValueFlag[Name, A]] =
+      override def parse(source: RootSender, extra: RunExtra): SF[ValueFlag[Name, A]] =
         ScammanderHelper.getArgs[F].flatMap { xs =>
           val matchingIndices = xs.zipWithIndex.collect {
             case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
@@ -52,7 +52,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
 
           NonEmptyList
             .fromList(matchingIndices)
-            .fold[StateT[F, List[RawCmdArg], ValueFlag[Name, A]]](SF.pure(ValueFlag(None))) {
+            .fold[SF[ValueFlag[Name, A]]](SF.pure(ValueFlag(None))) {
               case NonEmptyList(singleIdx, Nil) =>
                 val before = xs.take(singleIdx)
                 flagParam
@@ -65,7 +65,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
             }
         }
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ???
 
       override def usage(source: RootSender): F[String] = flagParam.usage(source).map(fUsage => s"$flagName $fUsage")
@@ -82,7 +82,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
       private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
       override def name: String = flagName
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], BooleanFlag[Name]] =
+      override def parse(source: RootSender, extra: RunExtra): SF[BooleanFlag[Name]] =
         ScammanderHelper.getArgs[F].transformF { fa =>
           fa.flatMap {
             case (xs, _) =>
@@ -97,7 +97,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
           }
         }
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ???
 
       override def usage(source: RootSender): F[String] = F.pure(flagName)
@@ -117,13 +117,13 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
   ): Parameter[Flags[A, B]] = new Parameter[Flags[A, B]] {
     override def name: String = s"${paramParam.name} ${flagsParam.name}"
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Flags[A, B]] =
+    override def parse(source: RootSender, extra: RunExtra): SF[Flags[A, B]] =
       for {
         t1 <- flagsParam.parse(source, extra)
         t2 <- paramParam.parse(source, extra)
       } yield Flags(t1, t2)
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       for {
         flagSuggestions  <- flagsParam.suggestions(source, extra)
         paramSuggestions <- paramParam.suggestions(source, extra)

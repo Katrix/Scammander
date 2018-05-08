@@ -22,7 +22,6 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.data.StateT
 import cats.syntax.all._
 
 trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
@@ -52,9 +51,9 @@ trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
     new ProxyParameter[OrSource[Base], Base] {
       override def param: Parameter[Base] = parameter
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], OrSource[Base]] = {
-        val fa1: StateT[F, List[RawCmdArg], Base]      = param.parse(source, extra)
-        lazy val fa2: StateT[F, List[RawCmdArg], Base] = Command.liftFStateParse(validator.validate(source))
+      override def parse(source: RootSender, extra: RunExtra): SF[OrSource[Base]] = {
+        val fa1: SF[Base]      = param.parse(source, extra)
+        lazy val fa2: SF[Base] = Command.liftFStateParse(validator.validate(source))
 
         ScammanderHelper.withFallbackState(fa1, fa2).map(Or.apply)
       }

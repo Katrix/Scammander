@@ -36,13 +36,13 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
     new Parameter[H :: T] {
       override def name: String = s"${hParam.value.name} ${tParam.value.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], H :: T] =
+      override def parse(source: RootSender, extra: RunExtra): SF[H :: T] =
         for {
           h <- hParam.value.parse(source, extra)
           t <- tParam.value.parse(source, extra)
         } yield h :: t
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.fallbackSuggestions(
           hParam.value.suggestions(source, extra),
           tParam.value.suggestions(source, extra)
@@ -61,10 +61,10 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
   implicit val hNilParam: Parameter[HNil] = new Parameter[HNil] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], HNil] =
+    override def parse(source: RootSender, extra: RunExtra): SF[HNil] =
       SF.pure(HNil)
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       StateT.liftF(Command.errorF("Suggestions on HNil"))
 
     override def usage(source: RootSender): F[String] = F.pure("")
@@ -77,14 +77,14 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
     new Parameter[H :+: T] {
       override def name: String = s"${hParam.value.name}|${tParam.value.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], H :+: T] = {
-        val hParse: StateT[F, List[RawCmdArg], H :+: T]      = hParam.value.parse(source, extra).map(Inl.apply)
-        lazy val tParse: StateT[F, List[RawCmdArg], H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
+      override def parse(source: RootSender, extra: RunExtra): SF[H :+: T] = {
+        val hParse: SF[H :+: T]      = hParam.value.parse(source, extra).map(Inl.apply)
+        lazy val tParse: SF[H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
 
         ScammanderHelper.withFallbackState(hParse, tParse)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] = {
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = {
         val sfh = hParam.value.suggestions(source, extra)
         val sft = tParam.value.suggestions(source, extra)
 
@@ -104,10 +104,10 @@ trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
   implicit val cNilParam: Parameter[CNil] = new Parameter[CNil] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], CNil] =
+    override def parse(source: RootSender, extra: RunExtra): SF[CNil] =
       ScammanderHelper.getPos[F].flatMapF(pos => Command.syntaxErrorF("Could not parse argument", pos))
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       SF.pure(Nil)
 
     override def usage(source: RootSender): F[String] = "".pure

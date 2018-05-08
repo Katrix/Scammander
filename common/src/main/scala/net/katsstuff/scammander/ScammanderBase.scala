@@ -173,12 +173,12 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Lifts an value F[A] into the parser State.
       */
-    def liftFStateParse[A](fa: F[A]): StateT[F, List[RawCmdArg], A] = ScammanderHelper.liftFStateParse(fa)
+    def liftFStateParse[A](fa: F[A]): SF[A] = ScammanderHelper.liftFStateParse(fa)
 
     /**
       * Lifts an either value into the parser state.
       */
-    def liftEitherStateParse[A](value: Either[CommandFailureNEL, A]): StateT[F, List[RawCmdArg], A] =
+    def liftEitherStateParse[A](value: Either[CommandFailureNEL, A]): SF[A] =
       ScammanderHelper.liftEitherState[F, List[RawCmdArg]](value)
 
     /**
@@ -190,19 +190,19 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     /**
       * Creates a generic command error step.
       */
-    def errorState[A](msg: String, shouldShowUsage: Boolean = false): StateT[F, List[RawCmdArg], A] =
+    def errorState[A](msg: String, shouldShowUsage: Boolean = false): SF[A] =
       liftFStateParse(errorF(msg, shouldShowUsage))
 
     /**
       * Creates a syntax command error step.
       */
-    def syntaxErrorState[A](msg: String, pos: Int): StateT[F, List[RawCmdArg], A] =
+    def syntaxErrorState[A](msg: String, pos: Int): SF[A] =
       liftFStateParse(syntaxErrorF(msg, pos))
 
     /**
       * Creates a usage  command error step.
       */
-    def usageErrorState[A](msg: String, pos: Int): StateT[F, List[RawCmdArg], A] =
+    def usageErrorState[A](msg: String, pos: Int): SF[A] =
       liftFStateParse(usageErrorF(msg, pos))
 
     /**
@@ -280,7 +280,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       * @param extra Extra platform specific info about the command.
       * @return A command step with the remaining arguments, and the parsed type.
       */
-    def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A]
+    def parse(source: RootSender, extra: RunExtra): SF[A]
 
     /**
       * Returns the suggestions for a parameter.
@@ -288,7 +288,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       * @param extra Extra platform specific info about the command.
       * @return A list of the remaining arguments, and the suggestions.
       */
-    def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]]
+    def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]]
 
     /**
       * The usage for this command.
@@ -311,7 +311,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
     override def name: String = param.name
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       param.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = param.usage(source)
@@ -329,10 +329,10 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     def mkNamed[A: HasName](paramName: String, choices: => Iterable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
       override def name: String = paramName
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Set[A]] =
+      override def parse(source: RootSender, extra: RunExtra): SF[Set[A]] =
         ScammanderHelper.parseMany[F, A](name, choices)
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestionsNamed(parse(source, tabExtraToRunExtra(extra)), choices)
     }
 
@@ -348,10 +348,10 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       override val name: String =
         names.mkString("|")
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A] =
+      override def parse(source: RootSender, extra: RunExtra): SF[A] =
         ScammanderHelper.parse[F, A](choiceName, names.map(_ -> obj).toMap)
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), names)
 
       override def usage(source: RootSender): F[String] = F.pure(name)
@@ -361,10 +361,10 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
       override def name: String = choices.keys.mkString("|")
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Set[A]] =
+      override def parse(source: RootSender, extra: RunExtra): SF[Set[A]] =
         ScammanderHelper.parseMany[F, A](choiceName, choices)
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), choices.keys)
 
       override def usage(source: RootSender): F[String] = name.pure
@@ -380,7 +380,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
     override def param: Parameter[A] = paramParam
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Named[Name, A]] =
+    override def parse(source: RootSender, extra: RunExtra): SF[Named[Name, A]] =
       paramParam.parse(source, extra).map(Named.apply)
   }
 
@@ -431,10 +431,10 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       override def parse(
           source: RootSender,
           extra: RunExtra
-      ): StateT[F, List[RawCmdArg], DynamicCommand[Args, Identifier, Sender, Param]] =
+      ): SF[DynamicCommand[Args, Identifier, Sender, Param]] =
         ScammanderHelper.parse(name, cmd.names.map(_ -> dynamic).toMap)
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), cmd.names)
     }
 
@@ -442,10 +442,10 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
     override def name: String = "raw..."
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], List[RawCmdArg]] =
+    override def parse(source: RootSender, extra: RunExtra): SF[List[RawCmdArg]] =
       ScammanderHelper.getArgs
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       StateT.set[F, List[RawCmdArg]](Nil) *> SF.pure(Nil)
   }
 
@@ -455,13 +455,13 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], NotUsed] =
+    override def parse(source: RootSender, extra: RunExtra): SF[NotUsed] =
       ScammanderHelper.firstArgOpt[F].flatMapF { arg =>
         if (arg.exists(_.content.nonEmpty)) Command.errorF("Too many arguments for command")
         else F.pure(NotUsed)
       }
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       ScammanderHelper.dropFirstArg
 
     override def usage(source: RootSender): F[String] = "".pure

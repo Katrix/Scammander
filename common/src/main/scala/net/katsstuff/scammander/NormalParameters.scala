@@ -28,8 +28,6 @@ import java.util.{Locale, UUID}
 import scala.language.higherKinds
 import scala.util.Try
 
-import cats.data.StateT
-
 trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
 
@@ -37,7 +35,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
     new Parameter[A] {
       override def name: String = parName
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A] =
+      override def parse(source: RootSender, extra: RunExtra): SF[A] =
         for {
           arg <- ScammanderHelper.firstArgAndDrop[F]
           res <- Command.liftEitherStateParse(
@@ -46,7 +44,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           )
         } yield res
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.dropFirstArg[F]
     }
 
@@ -54,13 +52,13 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
     new Parameter[A] {
       override def name: String = parName
 
-      override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A] =
+      override def parse(source: RootSender, extra: RunExtra): SF[A] =
         for {
           arg <- ScammanderHelper.firstArgAndDrop[F]
           res <- Command.liftFStateParse(parser(arg.content))
         } yield res
 
-      override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), possibleSuggestions())
     }
 
@@ -77,7 +75,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
     override def name: String = "url"
 
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], URL] =
+    override def parse(source: RootSender, extra: RunExtra): SF[URL] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- Command.liftEitherStateParse(
@@ -94,7 +92,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       ScammanderHelper.dropFirstArg[F]
   }
 
@@ -105,7 +103,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
 
   implicit val dateTimeParam: Parameter[LocalDateTime] = new Parameter[LocalDateTime] {
     override def name: String = "dataTime"
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], LocalDateTime] =
+    override def parse(source: RootSender, extra: RunExtra): SF[LocalDateTime] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- Command.liftEitherStateParse(
@@ -124,7 +122,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       for {
         arg <- ScammanderHelper.firstArgOpt[F].map(_.fold("")(_.content))
         _   <- ScammanderHelper.dropFirstArg[F]
@@ -136,7 +134,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
 
   implicit val durationParam: Parameter[Duration] = new Parameter[Duration] {
     override def name: String = "duration"
-    override def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], Duration] =
+    override def parse(source: RootSender, extra: RunExtra): SF[Duration] =
       for {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- {
@@ -158,7 +156,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         }
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
       ScammanderHelper.dropFirstArg[F]
   }
 }
