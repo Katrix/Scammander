@@ -63,7 +63,23 @@ trait BukkitParameters {
   }
 
   //TODO: Selector with NMS
-  implicit val allPlayerParam: Parameter[Set[Player]] = Parameter.mkNamed("player", Bukkit.getOnlinePlayers.asScala)
+  implicit val allPlayerParam: Parameter[Set[Player]] = new Parameter[Set[Player]] {
+
+    override val name: String = "player"
+
+    override def parse(source: CommandSender, extra: BukkitExtra): SF[Set[Player]] = {
+      val normalNames = ScammanderHelper.parseMany(name, Bukkit.getOnlinePlayers.asScala)
+      lazy val uuidPlayers = uuidParam
+        .parse(source, extra)
+        .flatMapF(uuid => Option(Bukkit.getPlayer(uuid)).toF(s"No player with the UUID ${uuid.toString}"))
+        .map(player => Set(player))
+
+      ScammanderHelper.withFallbackState(normalNames, uuidPlayers)
+    }
+
+    override def suggestions(source: CommandSender, extra: BukkitExtra): SF[Seq[String]] =
+      ScammanderHelper.suggestionsNamed(parse(source, tabExtraToRunExtra(extra)), Bukkit.getOnlinePlayers.asScala)
+  }
 
   implicit val playerParam: Parameter[Player] = new ProxyParameter[Player, OnlyOne[Player]] {
     override def param: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
@@ -82,8 +98,14 @@ trait BukkitParameters {
     ): SF[Set[OfflinePlayer]] = {
       val players: SF[Set[OfflinePlayer]]    = allPlayerParam.parse(source, extra).map(_.map(p => p: OfflinePlayer))
       lazy val users: SF[Set[OfflinePlayer]] = ScammanderHelper.parseMany(name, Bukkit.getOfflinePlayers)
+      lazy val uuidUsers = uuidParam
+        .parse(source, extra)
+        .flatMapF { uuid =>
+          Bukkit.getOfflinePlayers.find(_.getUniqueId == uuid).toF(s"No user with the UUID ${uuid.toString}")
+        }
+        .map(user => Set(user))
 
-      ScammanderHelper.withFallbackState(players, users)
+      ScammanderHelper.withFallbackState(ScammanderHelper.withFallbackState(players, users), uuidUsers)
     }
 
     override def suggestions(
