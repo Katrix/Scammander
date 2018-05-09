@@ -58,8 +58,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
               val before = xs.take(singleIdx)
               flagParam
                 .parse(source, extra)
-                .contramap[List[RawCmdArg]](_.drop(singleIdx + 1))
-                .modify(ys => before ::: ys)
+                .dimap[List[RawCmdArg], List[RawCmdArg]](_.drop(singleIdx + 1))(ys => before ::: ys)
                 .map(a => ValueFlag(Some(a)))
             case more =>
               StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx))))
@@ -84,11 +83,7 @@ trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
               println(before)
               flagParam
                 .suggestions(source, extra)
-                .contramap[List[RawCmdArg]] { ys =>
-                  println(ys)
-                  ys.drop(singleIdx + 1)
-                }
-                .modify(ys => before ::: ys)
+                .dimap[List[RawCmdArg], List[RawCmdArg]](_.drop(singleIdx + 1))(ys => before ::: ys)
             case more =>
               StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx._2))))
           }
