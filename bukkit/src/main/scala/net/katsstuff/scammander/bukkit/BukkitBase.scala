@@ -23,28 +23,31 @@ package net.katsstuff.scammander.bukkit
 import java.util
 
 import scala.collection.JavaConverters._
+import scala.language.higherKinds
 import scala.util.control.NonFatal
 
 import org.bukkit.ChatColor
 import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.plugin.java.JavaPlugin
 
-import cats.MonadError
-import cats.data.NonEmptyList
+import cats.{Monad, MonadError}
+import cats.data.{EitherT, NonEmptyList}
 import cats.syntax.all._
 import net.katsstuff.scammander
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
-trait BukkitBase
-    extends ScammanderBase[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] {
+trait BukkitBase[G[_]]
+    extends ScammanderBase[EitherT[G, NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] {
 
   override protected type Result                            = Boolean
   override protected type StaticChildCommand[Sender, Param] = ChildCommandExtra[Sender, Param]
 
-  type CommandStep[A] = Either[CommandFailureNEL, A]
+  implicit def G: Monad[G]
 
-  implicit override def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
-    cats.instances.either.catsStdInstancesForEither
+  implicit override def F: MonadError[EitherT[G, NonEmptyList[CommandFailure], ?], CommandFailureNEL] =
+    cats.data.EitherT.catsDataMonadErrorForEitherT
+
+  type CommandStep[A] = EitherT[G, CommandFailureNEL, A]
 
   case class ChildCommandExtra[Sender, Param](
       commandWrapper: BukkitCommandWrapper[Sender, Param],
@@ -59,6 +62,8 @@ trait BukkitBase
   override protected val defaultCommandSuccess: Boolean = true
 
   override protected def tabExtraToRunExtra(extra: BukkitExtra): BukkitExtra = extra
+
+  protected def runComputation[A](computation: EitherT[G, CommandFailureNEL, A]): Either[CommandFailureNEL, A]
 
   /**
     * Helper for creating an alias when registering a command.
@@ -146,7 +151,7 @@ trait BukkitBase
             result <- command.run(sender, extra, param)
           } yield result
 
-          res match {
+          runComputation(res) match {
             case Right(CommandSuccess(result)) => result
             case Left(NonEmptyList(CommandError(msg, true), Nil)) =>
               source.sendMessage(s"${ChatColor.RED}$msg\n${command.usage(source)}")
@@ -201,21 +206,21 @@ trait BukkitBase
           val parsedArgs = ScammanderHelper.stringToRawArgsQuoted(args.mkString(" "))
           val extra      = BukkitExtra(bukkitCommand, alias)
 
-          val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
+          val parse = ScammanderHelper.firstArgAndDrop.flatMapF[Boolean] { arg =>
             val isParsed =
               if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
               else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-            if (isParsed) true.pure else Command.errorF("Not child")
+            if (isParsed) EitherT.rightT(true) else Command.errorF("Not child")
           }
           val childSuggestions =
             ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(parsedArgs)
           val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
-          val ret = childSuggestions match {
+          val ret = runComputation(childSuggestions) match {
             case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
             case Left(_)            => paramSuggestions
           }
 
-          ret.getOrElse(Nil).asJava
+          runComputation(ret).getOrElse(Nil).asJava
         }
       } catch {
         case NonFatal(e) =>

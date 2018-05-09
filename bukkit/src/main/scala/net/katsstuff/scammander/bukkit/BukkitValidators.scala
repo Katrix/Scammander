@@ -2,27 +2,27 @@ package net.katsstuff.scammander.bukkit
 
 import java.net.InetAddress
 
-import org.bukkit.command.{BlockCommandSender, CommandSender, ProxiedCommandSender}
+import scala.language.higherKinds
+
+import org.bukkit.command.{BlockCommandSender, ProxiedCommandSender}
 import org.bukkit.entity.{Entity, Player}
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Location, OfflinePlayer}
 
-import cats.data.NonEmptyList
+import cats.data.EitherT
 import cats.syntax.either._
-import net.katsstuff.scammander
-import net.katsstuff.scammander.ScammanderBase
 import shapeless.{TypeCase, Typeable}
 
-trait BukkitValidators {
-  self: ScammanderBase[Either[NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] =>
+trait BukkitValidators[G[_]] {
+  self: BukkitBase[G] =>
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
-    case player: Player => Right(player)
+    case player: Player => EitherT.rightT(player)
     case _              => Command.usageErrorF("This command can only be used by players", -1)
   }
 
   implicit val offlinePlayerSender: UserValidator[OfflinePlayer] = UserValidator.mkValidator {
-    case player: OfflinePlayer => Right(player)
+    case player: OfflinePlayer => EitherT.rightT(player)
     case _                     => Command.usageErrorF("This command can only be used by players", -1)
   }
 
@@ -30,15 +30,15 @@ trait BukkitValidators {
     val EntityCase = TypeCase[A]
 
     UserValidator.mkValidator {
-      case EntityCase(entity)          => Right(entity)
+      case EntityCase(entity)          => EitherT.rightT(entity)
       case proxy: ProxiedCommandSender => entitySender.validate(proxy.getCaller)
       case _                           => Command.usageErrorF("This command can only be used by players", -1)
     }
   }
 
   implicit val locationSender: UserValidator[Location] = UserValidator.mkValidator {
-    case entity: Entity                  => Right(entity.getLocation)
-    case blockSender: BlockCommandSender => Right(blockSender.getBlock.getLocation)
+    case entity: Entity                  => EitherT.rightT(entity.getLocation)
+    case blockSender: BlockCommandSender => EitherT.rightT(blockSender.getBlock.getLocation)
     case proxy: ProxiedCommandSender     => locationSender.validate(proxy.getCaller)
     case _                               => Command.usageErrorF("This command can only be used by things which have a location", -1)
   }
@@ -47,7 +47,7 @@ trait BukkitValidators {
     UserValidator.mkValidator(locationSender.validate(_).map(_.toVector))
 
   implicit val ipSender: UserValidator[InetAddress] = UserValidator.mkValidator {
-    case player: Player              => Right(player.getAddress.getAddress)
+    case player: Player              => EitherT.rightT(player.getAddress.getAddress)
     case proxy: ProxiedCommandSender => ipSender.validate(proxy.getCaller)
     case _                           => Command.usageErrorF("This command can only be used by things which have an IP", -1)
   }
