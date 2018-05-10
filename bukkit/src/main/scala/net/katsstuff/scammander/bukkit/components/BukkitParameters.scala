@@ -1,4 +1,4 @@
-package net.katsstuff.scammander.bukkit
+package net.katsstuff.scammander.bukkit.components
 
 import scala.collection.JavaConverters._
 import scala.language.higherKinds
@@ -9,33 +9,20 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, OfflinePlayer, World}
 
-import cats.data.{EitherT, NonEmptyList}
 import cats.syntax.all._
-import net.katsstuff.scammander
+
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderHelper}
 import shapeless.Witness
 
-trait BukkitParameters[G[_]] {
-  self: BukkitBase[G]
-    with NormalParameters[
-      EitherT[G, NonEmptyList[scammander.CommandFailure], ?],
-      CommandSender,
-      BukkitExtra,
-      BukkitExtra
-    ]
-    with HelperParameters[
-      EitherT[G, NonEmptyList[scammander.CommandFailure], ?],
-      CommandSender,
-      BukkitExtra,
-      BukkitExtra
-    ] =>
+trait BukkitParameters[F[_]] {
+  self: BukkitBase[F]
+    with NormalParameters[F, CommandSender, BukkitExtra, BukkitExtra]
+    with HelperParameters[F, CommandSender, BukkitExtra, BukkitExtra] =>
 
   implicit val playerHasName: HasName[Player]               = HasName.instance((a: Player) => a.getName)
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = HasName.instance((a: OfflinePlayer) => a.getName)
   implicit val worldHasName: HasName[World]                 = HasName.instance((a: World) => a.getName)
   implicit val pluginHasName: HasName[Plugin]               = HasName.instance((a: Plugin) => a.getName)
-
-  type CommandStep[A] = EitherT[G, CommandFailureNEL, A]
 
   /**
     * A class to use for parameter that should require a specific permission.
@@ -50,7 +37,7 @@ trait BukkitParameters[G[_]] {
 
     val perm: String = w.value
 
-    def permError[B](pos: Int): CommandStep[B] =
+    def permError[B](pos: Int): F[B] =
       Command.usageErrorF[B]("You do not have the permissions needed to use this parameter", pos)
 
     override def parse(
@@ -58,14 +45,14 @@ trait BukkitParameters[G[_]] {
         extra: BukkitExtra
     ): SF[NeedPermission[S, A]] =
       if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
-      else ScammanderHelper.getPos[CommandStep].flatMapF(permError)
+      else ScammanderHelper.getPos[F].flatMapF(permError)
 
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
     ): SF[Seq[String]] =
       if (source.hasPermission(perm)) super.suggestions(source, extra)
-      else ScammanderHelper.dropFirstArg[CommandStep]
+      else ScammanderHelper.dropFirstArg[F]
   }
 
   //TODO: Selector with NMS
@@ -74,7 +61,7 @@ trait BukkitParameters[G[_]] {
     override val name: String = "player"
 
     override def parse(source: CommandSender, extra: BukkitExtra): SF[Set[Player]] = {
-      val normalNames = ScammanderHelper.parseMany[CommandStep, Player](name, Bukkit.getOnlinePlayers.asScala)
+      val normalNames = ScammanderHelper.parseMany[F, Player](name, Bukkit.getOnlinePlayers.asScala)
       lazy val uuidPlayers = uuidParam
         .parse(source, extra)
         .flatMapF(uuid => Option(Bukkit.getPlayer(uuid)).toF(s"No player with the UUID ${uuid.toString}"))
@@ -84,7 +71,7 @@ trait BukkitParameters[G[_]] {
     }
 
     override def suggestions(source: CommandSender, extra: BukkitExtra): SF[Seq[String]] =
-      ScammanderHelper.suggestionsNamed[CommandStep, Player, Set[Player]](
+      ScammanderHelper.suggestionsNamed[F, Player, Set[Player]](
         parse(source, tabExtraToRunExtra(extra)),
         Bukkit.getOnlinePlayers.asScala
       )
@@ -123,7 +110,7 @@ trait BukkitParameters[G[_]] {
     ): SF[Seq[String]] = {
       val parse = ScammanderHelper.firstArgAndDrop.flatMapF[Boolean] { arg =>
         val res = Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(arg.content))
-        if (res) EitherT.rightT(true) else Command.errorF("Not parsed")
+        if (res) F.pure(true) else Command.errorF("Not parsed")
       }
 
       ScammanderHelper.suggestionsNamed(parse, Bukkit.getOfflinePlayers)
@@ -168,7 +155,7 @@ trait BukkitParameters[G[_]] {
         arg: RawCmdArg
     ): SF[Double] =
       Command
-        .liftFtoSF(EitherT.fromOption[G](relativeToOpt, hasNoPosError(arg.start)))
+        .liftEitherToSF(relativeToOpt.toRight(hasNoPosError(arg.start)))
         .flatMap { relativeTo =>
           val newArg = arg.content.substring(1)
           if (newArg.isEmpty) SF.pure(relativeTo)
@@ -185,7 +172,7 @@ trait BukkitParameters[G[_]] {
         relativeToOpt: Option[Double]
     ): SF[Double] =
       for {
-        arg <- ScammanderHelper.firstArg[CommandStep]
+        arg <- ScammanderHelper.firstArg[F]
         res <- {
           if (arg.content.startsWith("~")) parseRelative(source, extra, relativeToOpt, arg)
           else doubleParam.parse(source, extra)

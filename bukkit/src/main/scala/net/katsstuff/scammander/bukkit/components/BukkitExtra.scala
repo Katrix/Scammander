@@ -18,13 +18,8 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package net.katsstuff.scammander.sponge
+package net.katsstuff.scammander.bukkit.components
 
-import org.spongepowered.api.command.CommandSource
-import org.spongepowered.api.text.Text
+import org.bukkit.command.{Command => BukkitCommand}
 
-case class CommandInfo(
-    permission: Option[String] = None,
-    help: CommandSource => Option[Text] = _ => None,
-    shortDescription: CommandSource => Option[Text] = _ => None
-)
+case class BukkitExtra(bukkitCommand: BukkitCommand, label: String)

@@ -1,4 +1,4 @@
-package net.katsstuff.scammander.sponge
+package net.katsstuff.scammander.sponge.components
 
 import java.io.{BufferedReader, StringReader}
 import java.net.InetAddress
@@ -6,6 +6,7 @@ import java.util.Locale
 import java.util.concurrent.Callable
 
 import scala.collection.JavaConverters._
+import scala.language.higherKinds
 import scala.reflect.ClassTag
 import scala.util.{Failure, Success, Try}
 
@@ -25,30 +26,15 @@ import com.flowpowered.math.vector.Vector3d
 
 import cats.data.NonEmptyList
 import cats.syntax.all._
-import net.katsstuff.scammander
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless.{TypeCase, Typeable, Witness}
 
-trait SpongeParameter {
-  self: ScammanderBase[
-    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-    CommandSource,
-    Unit,
-    Location[World]
-  ] with NormalParameters[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ]
-    with HelperParameters[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ]
-    with SpongeValidators =>
+trait SpongeParameter[F[_]] {
+  self: ScammanderBase[F, CommandSource, Unit, Location[World]]
+    with NormalParameters[F, CommandSource, Unit, Location[World]]
+    with HelperParameters[F, CommandSource, Unit, Location[World]]
+    with SpongeValidators[F] =>
 
   implicit val playerHasName: HasName[Player]                   = HasName.instance((a: Player) => a.getName)
   implicit val worldHasName: HasName[WorldProperties]           = HasName.instance((a: WorldProperties) => a.getWorldName)
@@ -74,7 +60,7 @@ trait SpongeParameter {
 
       val perm: String = w.value
 
-      def permError[B](pos: Int): CommandStep[B] =
+      def permError[B](pos: Int): F[B] =
         Command.usageErrorF[B]("You do not have the permissions needed to use this parameter", pos)
 
       override def parse(
@@ -234,7 +220,7 @@ trait SpongeParameter {
         arg: RawCmdArg
     ): SF[Double] =
       Command
-        .liftFtoSF(relativeToOpt.toRight(hasNoPosError(arg.start)))
+        .liftEitherToSF(relativeToOpt.toRight(hasNoPosError(arg.start)))
         .flatMap { relativeTo =>
           val newArg = arg.content.substring(1)
           if (newArg.isEmpty) SF.pure(relativeTo)
@@ -250,7 +236,7 @@ trait SpongeParameter {
         relativeToOpt: Option[Double]
     ): SF[Double] =
       for {
-        arg <- ScammanderHelper.firstArg[CommandStep]
+        arg <- ScammanderHelper.firstArg[F]
         res <- {
           if (arg.content.startsWith("~")) parseRelative(source, relativeToOpt, arg)
           else doubleParam.parse(source, ())
@@ -304,7 +290,7 @@ trait SpongeParameter {
           case RawCmdArg(_, _, arg) if arg.startsWith("@") =>
             try {
               Selector.parse(arg)
-              ScammanderHelper.dropFirstArg[CommandStep]
+              ScammanderHelper.dropFirstArg[F]
             } catch {
               case _: IllegalArgumentException =>
                 SF.pure[Seq[String]](Selector.complete(arg).asScala)
@@ -336,9 +322,9 @@ trait SpongeParameter {
 
     override def parse(source: CommandSource, extra: Unit): SF[InetAddress] = {
       val fromIp = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
-        tryToEither(Try {
+        F.fromEither(tryToEither(Try {
           InetAddress.getByName(arg.content)
-        }).left.map(e => Command.usageErrorNel(e.getMessage, arg.start))
+        }).left.map(e => Command.usageErrorNel(e.getMessage, arg.start)))
       }
       val fromPlayer = playerParam.parse(source, extra).map(_.getConnection.getAddress.getAddress)
 

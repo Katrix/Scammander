@@ -18,7 +18,7 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package net.katsstuff.scammander.bukkit
+package net.katsstuff.scammander.bukkit.components
 
 import java.util
 
@@ -30,24 +30,14 @@ import org.bukkit.ChatColor
 import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.plugin.java.JavaPlugin
 
-import cats.{Monad, MonadError}
-import cats.data.{EitherT, NonEmptyList}
+import cats.data.NonEmptyList
 import cats.syntax.all._
-import net.katsstuff.scammander
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
-trait BukkitBase[G[_]]
-    extends ScammanderBase[EitherT[G, NonEmptyList[scammander.CommandFailure], ?], CommandSender, BukkitExtra, BukkitExtra] {
+trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, BukkitExtra] {
 
   override protected type Result                            = Boolean
   override protected type StaticChildCommand[Sender, Param] = ChildCommandExtra[Sender, Param]
-
-  implicit def G: Monad[G]
-
-  implicit override def F: MonadError[EitherT[G, NonEmptyList[CommandFailure], ?], CommandFailureNEL] =
-    cats.data.EitherT.catsDataMonadErrorForEitherT
-
-  type CommandStep[A] = EitherT[G, CommandFailureNEL, A]
 
   case class ChildCommandExtra[Sender, Param](
       commandWrapper: BukkitCommandWrapper[Sender, Param],
@@ -63,7 +53,7 @@ trait BukkitBase[G[_]]
 
   override protected def tabExtraToRunExtra(extra: BukkitExtra): BukkitExtra = extra
 
-  protected def runComputation[A](computation: EitherT[G, CommandFailureNEL, A]): Either[CommandFailureNEL, A]
+  protected def runComputation[A](computation: F[A]): Either[CommandFailureNEL, A]
 
   /**
     * Helper for creating an alias when registering a command.
@@ -210,7 +200,7 @@ trait BukkitBase[G[_]]
             val isParsed =
               if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
               else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-            if (isParsed) EitherT.rightT(true) else Command.errorF("Not child")
+            if (isParsed) true.pure else Command.errorF("Not child")
           }
           val childSuggestions =
             ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(parsedArgs)

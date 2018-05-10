@@ -1,6 +1,8 @@
-package net.katsstuff.scammander.sponge
+package net.katsstuff.scammander.sponge.components
 
 import java.net.InetAddress
+
+import scala.language.higherKinds
 
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.command.source.{ProxySource, RemoteSource}
@@ -10,54 +12,47 @@ import org.spongepowered.api.world.{Locatable, Location, World}
 
 import com.flowpowered.math.vector.Vector3d
 
-import cats.data.NonEmptyList
-import cats.syntax.either._
-import net.katsstuff.scammander
+import cats.syntax.all._
 import net.katsstuff.scammander.ScammanderBase
 import shapeless._
 
-trait SpongeValidators {
-  self: ScammanderBase[
-    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-    CommandSource,
-    Unit,
-    Location[World]
-  ] =>
+trait SpongeValidators[F[_]] {
+  self: ScammanderBase[F, CommandSource, Unit, Location[World]] =>
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
-    case player: Player     => Right(player)
+    case player: Player     => player.pure
     case proxy: ProxySource => playerSender.validate(proxy.getOriginalSource)
-    case _                  => Left(NonEmptyList.one(Command.usageError("This command can only be used by players", -1)))
+    case _                  => Command.usageErrorF("This command can only be used by players", -1)
   }
 
   implicit val userSender: UserValidator[User] = UserValidator.mkValidator {
-    case user: User         => Right(user)
+    case user: User         => F.pure(user)
     case proxy: ProxySource => userSender.validate(proxy.getOriginalSource)
-    case _                  => Left(NonEmptyList.one(Command.usageError("This command can only be used by users", -1)))
+    case _                  => Command.usageErrorF("This command can only be used by users", -1)
   }
 
   implicit def entitySender[A <: Entity: Typeable]: UserValidator[A] = {
     val EntityCase = TypeCase[A]
 
     UserValidator.mkValidator {
-      case EntityCase(entity) => Right(entity)
+      case EntityCase(entity) => entity.pure
       case proxy: ProxySource => entitySender.validate(proxy.getOriginalSource)
-      case _                  => Left(NonEmptyList.one(Command.usageError("This command can only be used by players", -1)))
+      case _                  => Command.usageErrorF("This command can only be used by players", -1)
     }
   }
 
   implicit val locationSender: UserValidator[Location[World]] = UserValidator.mkValidator {
-    case locatable: Locatable => Right(locatable.getLocation)
+    case locatable: Locatable => locatable.getLocation.pure
     case proxy: ProxySource   => locationSender.validate(proxy.getOriginalSource)
-    case _                    => Left(NonEmptyList.one(Command.usageError("This command can only be used by players", -1)))
+    case _                    => Command.usageErrorF("This command can only be used by players", -1)
   }
 
   implicit val vector3dSender: UserValidator[Vector3d] =
     UserValidator.mkValidator(locationSender.validate(_).map(_.getPosition))
 
   implicit val ipSender: UserValidator[InetAddress] = UserValidator.mkValidator {
-    case remote: RemoteSource => Right(remote.getConnection.getAddress.getAddress)
+    case remote: RemoteSource => remote.getConnection.getAddress.getAddress.pure
     case proxy: ProxySource   => ipSender.validate(proxy.getOriginalSource)
-    case _                    => Left(NonEmptyList.one(Command.usageError("This command can only be used by things which have an IP", -1)))
+    case _                    => Command.usageErrorF("This command can only be used by things which have an IP", -1)
   }
 }

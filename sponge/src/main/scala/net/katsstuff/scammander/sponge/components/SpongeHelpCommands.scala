@@ -1,4 +1,6 @@
-package net.katsstuff.scammander.sponge
+package net.katsstuff.scammander.sponge.components
+
+import scala.language.higherKinds
 
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.service.pagination.PaginationList
@@ -8,35 +10,13 @@ import org.spongepowered.api.text.format.TextColors._
 import org.spongepowered.api.text.format.TextStyles._
 import org.spongepowered.api.world.{Location, World}
 
-import cats.data.NonEmptyList
-import net.katsstuff.scammander
 import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters, ScammanderBase}
 
-trait SpongeHelpCommands
-    extends HelpCommands[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ] {
-  self: ScammanderBase[
-    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-    CommandSource,
-    Unit,
-    Location[World]
-  ] with NormalParameters[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ]
-    with HelperParameters[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ]
-    with SpongeBase =>
+trait SpongeHelpCommands[F[_]] extends HelpCommands[F, CommandSource, Unit, Location[World]] {
+  self: ScammanderBase[F, CommandSource, Unit, Location[World]]
+    with NormalParameters[F, CommandSource, Unit, Location[World]]
+    with HelperParameters[F, CommandSource, Unit, Location[World]]
+    with SpongeBase[F] =>
 
   override type Title = Text
 
@@ -48,7 +28,7 @@ trait SpongeHelpCommands
       title: Text,
       source: CommandSource,
       commands: Set[ChildCommand[_, _]]
-  ): CommandStep[CommandSuccess] = {
+  ): F[CommandSuccess] = {
     val pages = PaginationList.builder()
     pages.title(title)
 
@@ -76,7 +56,7 @@ trait SpongeHelpCommands
       source: CommandSource,
       command: StaticChildCommand[_, _],
       path: List[String]
-  ): CommandStep[CommandSuccess] = {
+  ): F[CommandSuccess] = {
     if (command.testPermission(source)) {
       val commandName = path.mkString("/", " ", "")
       val pages       = PaginationList.builder()

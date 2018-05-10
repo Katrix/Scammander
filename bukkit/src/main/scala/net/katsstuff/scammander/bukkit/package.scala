@@ -20,4 +20,6 @@
  */
 package net.katsstuff.scammander
 
+import net.katsstuff.scammander.bukkit.components.BukkitBaseAll
+
 package object bukkit extends BukkitBaseAll

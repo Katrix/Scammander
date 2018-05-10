@@ -1,5 +1,6 @@
-package net.katsstuff.scammander.sponge
+package net.katsstuff.scammander.sponge.components
 
+import scala.language.higherKinds
 import scala.collection.JavaConverters._
 
 import org.spongepowered.api.command.CommandSource
@@ -9,44 +10,31 @@ import org.spongepowered.api.world.{Location, World}
 
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
-import cats.data.{NonEmptyList, StateT}
-import cats.syntax.either._
-import net.katsstuff.scammander
+import cats.syntax.all._
 import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
 import shapeless._
 
-trait SpongeOrParameter {
-  self: ScammanderBase[
-    ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-    CommandSource,
-    Unit,
-    Location[World]
-  ] with OrParameters[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ]
-    with SpongeValidators =>
-
-  type CommandStep[A] = Either[CommandFailureNEL, A]
+trait SpongeOrParameter[F[_]] {
+  self: ScammanderBase[F, CommandSource, Unit, Location[World]]
+    with OrParameters[F, CommandSource, Unit, Location[World]]
+    with SpongeValidators[F] =>
 
   /**
     * A typeclass which returns what the sender is currently targeting.
     */
   trait Targeter[A] {
-    def getTarget(source: CommandSource, pos: Int): CommandStep[A]
+    def getTarget(source: CommandSource, pos: Int): F[A]
   }
   object Targeter {
     //noinspection ConvertExpressionToSAM
-    def instance[A](f: (CommandSource, Int) => CommandStep[A]): Targeter[A] = new Targeter[A] {
-      override def getTarget(source: CommandSource, pos: Int): CommandStep[A] = f(source, pos)
+    def instance[A](f: (CommandSource, Int) => F[A]): Targeter[A] = new Targeter[A] {
+      override def getTarget(source: CommandSource, pos: Int): F[A] = f(source, pos)
     }
 
     implicit def entityTargeter[A <: Entity](implicit typeable: Typeable[A]): Targeter[A] = new Targeter[A] {
       private val EntityCase = TypeCase[A]
 
-      override def getTarget(source: CommandSource, pos: Int): CommandStep[A] = {
+      override def getTarget(source: CommandSource, pos: Int): F[A] = {
 
         entitySender[Entity].validate(source).flatMap { entity =>
           val target = entity.getWorld
@@ -59,7 +47,7 @@ trait SpongeOrParameter {
               case EntityCase(e) => e
             }
 
-          target.toRight(Command.usageErrorNel("Not looking at an entity", pos))
+          F.fromOption(target, Command.usageErrorNel("Not looking at an entity", pos))
         }
       }
     }
@@ -68,7 +56,7 @@ trait SpongeOrParameter {
       Targeter.instance { (source: CommandSource, pos: Int) =>
         entitySender[Entity].validate(source).flatMap { entity =>
           val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
-          res.toRight(Command.usageErrorNel("Not looking at an block", pos))
+          F.fromOption(res, Command.usageErrorNel("Not looking at an block", pos))
         }
       }
 
@@ -99,16 +87,15 @@ trait SpongeOrParameter {
   ): Parameter[OrTarget[Base]] = new ProxyParameter[OrTarget[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse(source: CommandSource, extra: Unit): StateT[CommandStep, List[RawCmdArg], OrTarget[Base]] =
+    override def parse(source: CommandSource, extra: Unit): SF[OrTarget[Base]] =
       for {
         pos <- ScammanderHelper.getPos
         res <- ScammanderHelper
           .withFallbackState(parameter.parse(source, extra), Command.liftFtoSF(targeter.getTarget(source, pos)))
       } yield Or(res)
 
-    override def usage(source: CommandSource): CommandStep[String] = {
-      import cats.syntax.either._
-      targeter.getTarget(source, -1).map(_ => s"[$name]").orElse(super.usage(source))
+    override def usage(source: CommandSource): F[String] = {
+      targeter.getTarget(source, -1).map(_ => s"[$name]").handleErrorWith(_ => super.usage(source))
     }
   }
 }

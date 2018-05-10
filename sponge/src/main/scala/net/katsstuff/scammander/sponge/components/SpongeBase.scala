@@ -18,12 +18,13 @@
  * DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  */
-package net.katsstuff.scammander.sponge
+package net.katsstuff.scammander.sponge.components
 
 import java.util
 import java.util.Optional
 
 import scala.collection.JavaConverters._
+import scala.language.higherKinds
 
 import org.spongepowered.api.Sponge
 import org.spongepowered.api.command._
@@ -31,19 +32,11 @@ import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
-import cats.MonadError
 import cats.data.NonEmptyList
 import cats.syntax.all._
-import net.katsstuff.scammander
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
-trait SpongeBase
-    extends ScammanderBase[
-      ({ type L[A] = Either[NonEmptyList[scammander.CommandFailure], A] })#L,
-      CommandSource,
-      Unit,
-      Location[World]
-    ] {
+trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Location[World]] {
 
   override protected type Result                            = Int
   override protected type StaticChildCommand[Sender, Param] = SpongeCommandWrapper[Sender, Param]
@@ -54,8 +47,7 @@ trait SpongeBase
 
   override protected def tabExtraToRunExtra(extra: Location[World]): Unit = ()
 
-  implicit override def F: MonadError[CommandStep, NonEmptyList[CommandFailure]] =
-    cats.instances.either.catsStdInstancesForEither
+  protected def runComputation[A](computation: F[A]): Either[CommandFailureNEL, A]
 
   /**
     * Helper for creating an alias when registering a command.
@@ -133,7 +125,7 @@ trait SpongeBase
           result <- command.run(sender, (), param)
         } yield result
 
-        res match {
+        runComputation(res) match {
           case Right(CommandSuccess(count)) => CommandResult.successCount(count)
           case Left(NonEmptyList(CommandError(msg, true), Nil)) =>
             throw new CommandException(Text.of(msg).concat(Text.NEW_LINE).concat(getUsage(source)))
@@ -174,7 +166,7 @@ trait SpongeBase
       if (doChildCommand && childCommand.testPermission(source)) {
         childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
       } else {
-        val parse = ScammanderHelper.firstArgAndDrop.flatMapF { arg =>
+        val parse = ScammanderHelper.firstArgAndDrop.flatMapF[Boolean] { arg =>
           val isParsed =
             if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
             else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
@@ -183,12 +175,12 @@ trait SpongeBase
         val childSuggestions =
           ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args)
         val paramSuggestions = command.suggestions(source, targetPosition, args)
-        val ret = childSuggestions match {
+        val ret = runComputation(childSuggestions) match {
           case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
           case Left(_)            => paramSuggestions
         }
 
-        ret.getOrElse(Nil).asJava
+        runComputation(ret).getOrElse(Nil).asJava
       }
     }
 
@@ -204,7 +196,7 @@ trait SpongeBase
       case None       => Optional.empty()
     }
 
-    override def getUsage(source: CommandSource): Text = Text.of(command.usage(source))
+    override def getUsage(source: CommandSource): Text = Text.of(runComputation(command.usage(source)))
 
     def register(plugin: AnyRef, aliases: Seq[String]): Option[CommandMapping] = {
       val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)
