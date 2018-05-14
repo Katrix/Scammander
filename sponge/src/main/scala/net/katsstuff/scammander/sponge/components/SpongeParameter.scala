@@ -31,9 +31,9 @@ import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless.{TypeCase, Typeable, Witness}
 
 trait SpongeParameter[F[_]] {
-  self: ScammanderBase[F, CommandSource, Unit, Location[World]]
-    with NormalParameters[F, CommandSource, Unit, Location[World]]
-    with HelperParameters[F, CommandSource, Unit, Location[World]]
+  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]]
+    with NormalParameters[F, CommandSource, Unit, Option[Location[World]]]
+    with HelperParameters[F, CommandSource, Unit, Option[Location[World]]]
     with SpongeValidators[F] =>
 
   implicit val playerHasName: HasName[Player]                   = HasName.instance((a: Player) => a.getName)
@@ -72,7 +72,7 @@ trait SpongeParameter[F[_]] {
 
       override def suggestions(
           source: CommandSource,
-          extra: Location[World]
+          extra: Option[Location[World]]
       ): SF[Seq[String]] =
         if (source.hasPermission(perm)) super.suggestions(source, extra)
         else ScammanderHelper.dropFirstArg
@@ -108,7 +108,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] = ScammanderHelper.firstArgOpt.flatMap {
       case Some(arg) =>
         val choices =
@@ -145,7 +145,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] =
       ScammanderHelper.firstArgOpt.flatMap {
         case Some(arg) => ScammanderHelper.suggestions(parse(source, ()), Selector.complete(arg.content).asScala)
@@ -180,7 +180,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] =
       ScammanderHelper.suggestions(parse(source, ()), userStorage.getAll.asScala.collect {
         case profile if profile.getName.isPresent => profile.getName.get()
@@ -207,7 +207,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] =
       ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg
 
@@ -283,7 +283,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] = ScammanderHelper.firstArgOpt.flatMap { cmdArg =>
       cmdArg
         .collect {
@@ -333,7 +333,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] = ScammanderHelper.dropFirstArg
   }
 
@@ -362,7 +362,7 @@ trait SpongeParameter[F[_]] {
 
     override def suggestions(
         source: CommandSource,
-        extra: Location[World]
+        extra: Option[Location[World]]
     ): SF[Seq[String]] = ScammanderHelper.dropFirstArg
   }
 

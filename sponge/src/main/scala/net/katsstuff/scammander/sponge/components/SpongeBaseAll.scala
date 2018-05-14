@@ -13,7 +13,7 @@ trait SpongeBaseAll
       ({ type L[A] = Either[NonEmptyList[CommandFailure], A] })#L,
       CommandSource,
       Unit,
-      Location[World]
+      Option[Location[World]]
     ]
     with SpongeValidators[({ type L[A]   = Either[NonEmptyList[CommandFailure], A] })#L]
     with SpongeParameter[({ type L[A]    = Either[NonEmptyList[CommandFailure], A] })#L]

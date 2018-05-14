@@ -17,7 +17,7 @@ import net.katsstuff.scammander.ScammanderBase
 import shapeless._
 
 trait SpongeValidators[F[_]] {
-  self: ScammanderBase[F, CommandSource, Unit, Location[World]] =>
+  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]] =>
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player     => player.pure

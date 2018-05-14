@@ -23,6 +23,8 @@ package net.katsstuff.scammander.sponge.components
 import java.util
 import java.util.Optional
 
+import javax.annotation.Nullable
+
 import scala.collection.JavaConverters._
 import scala.language.higherKinds
 
@@ -36,7 +38,7 @@ import cats.data.NonEmptyList
 import cats.syntax.all._
 import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
-trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Location[World]] {
+trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Location[World]]] {
 
   override protected type Result                            = Int
   override protected type StaticChildCommand[Sender, Param] = SpongeCommandWrapper[Sender, Param]
@@ -45,7 +47,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Location[W
 
   //Helpers used when registering command
 
-  override protected def tabExtraToRunExtra(extra: Location[World]): Unit = ()
+  override protected def tabExtraToRunExtra(extra: Option[Location[World]]): Unit = ()
 
   protected def runComputation[A](computation: F[A]): Either[CommandFailureNEL, A]
 
@@ -152,7 +154,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Location[W
     override def getSuggestions(
         source: CommandSource,
         arguments: String,
-        targetPosition: Location[World]
+        @Nullable targetPosition: Location[World]
     ): util.List[String] = {
       def headCount(arg: String) = command.children.flatMap(_.aliases).count(_.startsWith(arg))
 
@@ -174,7 +176,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Location[W
         }
         val childSuggestions =
           ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args)
-        val paramSuggestions = command.suggestions(source, targetPosition, args)
+        val paramSuggestions = command.suggestions(source, Option(targetPosition), args)
         val ret = runComputation(childSuggestions) match {
           case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
           case Left(_)            => paramSuggestions

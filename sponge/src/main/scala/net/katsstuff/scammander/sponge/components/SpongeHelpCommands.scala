@@ -12,10 +12,10 @@ import org.spongepowered.api.world.{Location, World}
 
 import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters, ScammanderBase}
 
-trait SpongeHelpCommands[F[_]] extends HelpCommands[F, CommandSource, Unit, Location[World]] {
-  self: ScammanderBase[F, CommandSource, Unit, Location[World]]
-    with NormalParameters[F, CommandSource, Unit, Location[World]]
-    with HelperParameters[F, CommandSource, Unit, Location[World]]
+trait SpongeHelpCommands[F[_]] extends HelpCommands[F, CommandSource, Unit, Option[Location[World]]] {
+  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]]
+    with NormalParameters[F, CommandSource, Unit, Option[Location[World]]]
+    with HelperParameters[F, CommandSource, Unit, Option[Location[World]]]
     with SpongeBase[F] =>
 
   override type Title = Text

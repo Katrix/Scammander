@@ -15,8 +15,8 @@ import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
 import shapeless._
 
 trait SpongeOrParameter[F[_]] {
-  self: ScammanderBase[F, CommandSource, Unit, Location[World]]
-    with OrParameters[F, CommandSource, Unit, Location[World]]
+  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]]
+    with OrParameters[F, CommandSource, Unit, Option[Location[World]]]
     with SpongeValidators[F] =>
 
   /**
