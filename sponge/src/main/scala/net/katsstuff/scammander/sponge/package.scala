@@ -20,6 +20,6 @@
  */
 package net.katsstuff.scammander
 
-import net.katsstuff.scammander.sponge.components.SpongeBaseAll
+import net.katsstuff.scammander.sponge.components.SpongeBaseAllEither
 
-package object sponge extends SpongeBaseAll
+package object sponge extends SpongeBaseAllEither
