@@ -3,9 +3,9 @@ package net.katsstuff.scammander.sponge.components
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.world.{Location, World}
 
-import cats.MonadError
-import cats.data.NonEmptyList
-import net.katsstuff.scammander.{CommandFailure, ScammanderBaseAll}
+import scala.language.higherKinds
+
+import net.katsstuff.scammander.ScammanderBaseAll
 
 trait SpongeBaseAll[F[_]]
     extends SpongeBase[F]
