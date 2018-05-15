@@ -36,17 +36,17 @@ import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, BukkitExtra] {
 
-  override type Result                            = Boolean
-  override type StaticChildCommand[Sender, Param] = ChildCommandExtra[Sender, Param]
+  override type Result             = Boolean
+  override type StaticChildCommand = ChildCommandExtra
 
-  case class ChildCommandExtra[Sender, Param](
-      commandWrapper: BukkitCommandWrapper[Sender, Param],
+  case class ChildCommandExtra(
+      commandWrapper: BukkitCommandWrapper,
       permission: Option[String],
       help: CommandSender => Option[String],
       description: CommandSender => Option[String]
-  ) extends BaseStaticChildCommand[Sender, Param] {
+  ) extends BaseStaticChildCommand {
 
-    override def command: Command[Sender, Param] = commandWrapper.command
+    override def command: ComplexCommand = commandWrapper.command
   }
 
   override protected val defaultCommandSuccess: Boolean = true
@@ -89,16 +89,16 @@ trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, Buk
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
-    def toBukkit: BukkitCommandWrapper[Sender, Param] = BukkitCommandWrapper(command)
+    def toBukkit: BukkitCommandWrapper = BukkitCommandWrapper(command)
     def toChild(
         aliases: Set[String],
         permission: Option[String] = None,
         help: CommandSender => Option[String] = _ => None,
         description: CommandSender => Option[String] = _ => None
-    ): ChildCommand[Sender, Param] =
+    ): ChildCommand =
       ChildCommand(aliases, ChildCommandExtra(command.toBukkit, permission, help, description))
 
-    def toRootChild(plugin: JavaPlugin, name: String): ChildCommand[Sender, Param] = {
+    def toRootChild(plugin: JavaPlugin, name: String): ChildCommand = {
       val bukkitCommand = plugin.getCommand(name)
 
       ChildCommand(
@@ -115,7 +115,7 @@ trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, Buk
     def register(plugin: JavaPlugin, name: String): Unit = toBukkit.register(plugin, name)
   }
 
-  case class BukkitCommandWrapper[Sender, Param](command: Command[Sender, Param]) extends TabExecutor {
+  case class BukkitCommandWrapper(command: ComplexCommand) extends TabExecutor {
 
     override def onCommand(
         source: CommandSender,
@@ -134,12 +134,7 @@ trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, Buk
           }
         } else {
           val extra = BukkitExtra(bukkitCommand, label)
-
-          val res = for {
-            sender <- command.userValidator.validate(source)
-            param  <- command.par.parse(source, extra).runA(ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
-            result <- command.run(sender, extra, param)
-          } yield result
+          val res   = command.runRootArgs(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
 
           runComputation(res) match {
             case Right(CommandSuccess(result)) => result

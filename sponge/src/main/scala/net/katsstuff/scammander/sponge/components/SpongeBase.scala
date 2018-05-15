@@ -40,8 +40,8 @@ import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Location[World]]] {
 
-  override type Result                            = Int
-  override type StaticChildCommand[Sender, Param] = SpongeCommandWrapper[Sender, Param]
+  override type Result             = Int
+  override type StaticChildCommand = SpongeCommandWrapper
 
   override protected val defaultCommandSuccess: Int = 1
 
@@ -85,15 +85,15 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Loc
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
-    def toSponge(info: CommandInfo): SpongeCommandWrapper[Sender, Param] = SpongeCommandWrapper(command, info)
-    def toChild(aliases: Seq[String], info: CommandInfo): ChildCommand[Sender, Param] =
+    def toSponge(info: CommandInfo): SpongeCommandWrapper = SpongeCommandWrapper(command, info)
+    def toChild(aliases: Seq[String], info: CommandInfo): ChildCommand =
       ChildCommand(aliases.toSet, toSponge(info))
     def toChild(
         aliases: Seq[String],
         permission: Option[String] = None,
         help: CommandSource => Option[Text] = _ => None,
         shortDescription: CommandSource => Option[Text] = _ => None
-    ): ChildCommand[Sender, Param] =
+    ): ChildCommand =
       ChildCommand(aliases.toSet, toSponge(CommandInfo(permission, help, shortDescription)))
 
     def register(
@@ -106,9 +106,9 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Loc
       toSponge(CommandInfo(permission, help, shortDescription)).register(plugin, aliases)
   }
 
-  case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
+  case class SpongeCommandWrapper(command: ComplexCommand, info: CommandInfo)
       extends CommandCallable
-      with BaseStaticChildCommand[Sender, Param] {
+      with BaseStaticChildCommand {
 
     override def process(source: CommandSource, arguments: String): CommandResult = {
       val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
@@ -121,11 +121,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Loc
           throw new CommandPermissionException
         }
       } else {
-        val res = for {
-          sender <- command.userValidator.validate(source)
-          param  <- command.par.parse(source, ()).runA(args)
-          result <- command.run(sender, (), param)
-        } yield result
+        val res = command.runRootArgs(source, (), args)
 
         runComputation(res) match {
           case Right(CommandSuccess(count)) => CommandResult.successCount(count)

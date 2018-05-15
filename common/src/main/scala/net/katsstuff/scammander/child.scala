@@ -2,24 +2,23 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-case class ComplexChildCommand[F[_], Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand[
-    ChildSender,
-    ChildParam
-] <: ComplexBaseStaticChildCommand[
+case class ComplexChildCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand <: ComplexBaseStaticChildCommand[
   F,
-  ChildSender,
-  ChildParam,
   RootSender,
   RunExtra,
   TabExtra,
   Result,
   StaticChildCommand
-]](aliases: Set[String], command: StaticChildCommand[Sender, Param])
+]](aliases: Set[String], command: StaticChildCommand)
 
-trait ComplexBaseStaticChildCommand[F[_], Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand[
-    ChildSender,
-    ChildParam
-] <: ComplexBaseStaticChildCommand[F, ChildSender, ChildParam, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]] {
+trait ComplexBaseStaticChildCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand <: ComplexBaseStaticChildCommand[
+  F,
+  RootSender,
+  RunExtra,
+  TabExtra,
+  Result,
+  StaticChildCommand
+]] {
 
-  def command: ComplexCommand[F, Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
+  def command: ComplexCommand[F, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
 }

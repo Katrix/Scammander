@@ -40,16 +40,14 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
   val FtoSF: F ~> SF = StateT.liftK[F, List[RawCmdArg]]
 
   type Result
-  type StaticChildCommand[Sender, Param] <: BaseStaticChildCommand[Sender, Param]
+  type StaticChildCommand <: BaseStaticChildCommand
 
   protected val defaultCommandSuccess: Result
 
   protected def tabExtraToRunExtra(extra: TabExtra): RunExtra
 
-  type BaseStaticChildCommand[Sender, Param] = scammander.ComplexBaseStaticChildCommand[
+  type BaseStaticChildCommand = scammander.ComplexBaseStaticChildCommand[
     F,
-    Sender,
-    Param,
     RootSender,
     RunExtra,
     TabExtra,
@@ -57,8 +55,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     StaticChildCommand
   ]
 
-  type ChildCommand[Sender, Param] =
-    scammander.ComplexChildCommand[F, Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
+  type ChildCommand = scammander.ComplexChildCommand[F, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
   val ChildCommand: ComplexChildCommand.type = scammander.ComplexChildCommand
 
   type UserValidator[A] = ComplexUserValidator[F, A, RootSender]
@@ -103,14 +100,27 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   //Commands and parameters
 
+  type ComplexCommand = scammander.ComplexCommand[F, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
+
   abstract class InnerCommand[Sender, Param](
       implicit
-      _userValidator: UserValidator[Sender],
-      _par: Parameter[Param]
-  ) extends scammander.ComplexCommand[F, Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand] {
+      userValidator: UserValidator[Sender],
+      par: Parameter[Param]
+  ) extends ComplexCommand {
+
+    override def runRootArgs(source: RootSender, extra: RunExtra, args: List[RawCmdArg]): F[CommandSuccess] =
+      for {
+        sender <- userValidator.validate(source)
+        param  <- par.parse(source, extra).runA(args)
+        result <- run(sender, extra, param)
+      } yield result
+
+    def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess]
 
     override def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): F[Seq[String]] =
-      _par.suggestions(source, extra).runA(strArgs)
+      par.suggestions(source, extra).runA(strArgs)
+
+    override def usage(source: RootSender): F[String] = par.usage(source)
   }
 
   type Command[Sender, Param] = InnerCommand[Sender, Param]
@@ -143,26 +153,26 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       * Create a simple command with children from a function that takes a
       * parameter of the given type.
       */
-    def withChildren[Param: Parameter](childSet: Set[ChildCommand[_, _]])(
+    def withChildren[Param: Parameter](childSet: Set[ChildCommand])(
         runCmd: (RootSender, RunExtra, Param) => F[CommandSuccess]
     ): Command[RootSender, Param] = new Command[RootSender, Param] {
       override def run(source: RootSender, extra: RunExtra, arg: Param): F[CommandSuccess] =
         runCmd(source, extra, arg)
 
-      override def children: Set[ChildCommand[_, _]] = childSet
+      override def children: Set[ChildCommand] = childSet
     }
 
     /**
       * Create a command with children from a function that takes a parameter and sender of the given types.
       */
-    def withSenderAndChildren[Sender: UserValidator, Param: Parameter](childSet: Set[ChildCommand[_, _]])(
+    def withSenderAndChildren[Sender: UserValidator, Param: Parameter](childSet: Set[ChildCommand])(
         runCmd: (Sender, RunExtra, Param) => F[CommandSuccess]
     ): Command[Sender, Param] =
       new Command[Sender, Param] {
         override def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess] =
           runCmd(source, extra, arg)
 
-        override def children: Set[ChildCommand[_, _]] = childSet
+        override def children: Set[ChildCommand] = childSet
       }
 
     /**
