@@ -21,6 +21,11 @@
 package net.katsstuff.scammander
 
 /**
+  * A successful run of a command.
+  */
+case class CommandSuccess[Result](result: Result)
+
+/**
   * Base trait for all command failures.
   */
 sealed trait CommandFailure {

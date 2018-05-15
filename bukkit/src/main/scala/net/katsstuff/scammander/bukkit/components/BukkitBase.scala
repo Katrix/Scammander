@@ -36,15 +36,15 @@ import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, BukkitExtra] {
 
-  override protected type Result                            = Boolean
-  override protected type StaticChildCommand[Sender, Param] = ChildCommandExtra[Sender, Param]
+  override type Result                            = Boolean
+  override type StaticChildCommand[Sender, Param] = ChildCommandExtra[Sender, Param]
 
   case class ChildCommandExtra[Sender, Param](
       commandWrapper: BukkitCommandWrapper[Sender, Param],
       permission: Option[String],
       help: CommandSender => Option[String],
       description: CommandSender => Option[String]
-  ) extends SharedStaticChildCommand[Sender, Param] {
+  ) extends BaseStaticChildCommand[Sender, Param] {
 
     override def command: Command[Sender, Param] = commandWrapper.command
   }

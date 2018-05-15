@@ -22,7 +22,6 @@ package net.katsstuff.scammander
 
 import java.util.Locale
 
-import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
 import cats.data.{NonEmptyList, StateT}
@@ -40,34 +39,30 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   val FtoSF: F ~> SF = StateT.liftK[F, List[RawCmdArg]]
 
-  protected type Result
-  protected type StaticChildCommand[Sender, Param] <: SharedStaticChildCommand[Sender, Param]
+  type Result
+  type StaticChildCommand[Sender, Param] <: BaseStaticChildCommand[Sender, Param]
 
   protected val defaultCommandSuccess: Result
+
   protected def tabExtraToRunExtra(extra: TabExtra): RunExtra
 
-  trait SharedStaticChildCommand[Sender, Param] {
+  type BaseStaticChildCommand[Sender, Param] = scammander.ComplexBaseStaticChildCommand[
+    F,
+    Sender,
+    Param,
+    RootSender,
+    RunExtra,
+    TabExtra,
+    Result,
+    StaticChildCommand
+  ]
 
-    def command: Command[Sender, Param]
-  }
+  type ChildCommand[Sender, Param] =
+    scammander.ComplexChildCommand[F, Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
+  val ChildCommand: ComplexChildCommand.type = scammander.ComplexChildCommand
 
-  case class ChildCommand[Sender, Param](aliases: Set[String], command: StaticChildCommand[Sender, Param])
+  type UserValidator[A] = ComplexUserValidator[F, A, RootSender]
 
-  /**
-    * A successful run of a command.
-    */
-  case class CommandSuccess(result: Result = defaultCommandSuccess)
-
-  /**
-    * A typeclass which helps convert a user into another type.
-    */
-  trait UserValidator[A] {
-
-    /**
-      * Validates the sender.
-      */
-    def validate(sender: RootSender): F[A]
-  }
   object UserValidator {
     def apply[A](implicit validator: UserValidator[A]): UserValidator[A] = validator
 
@@ -79,14 +74,17 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       new UserValidator[A] {
         override def validate(sender: RootSender): F[A] = validator(sender)
       }
-
-    implicit val rootValidator: UserValidator[RootSender] = mkValidator(F.pure)
   }
+
+  implicit val rootValidator: UserValidator[RootSender] = UserValidator.mkValidator(F.pure)
 
   //Results and steps
 
   type CommandFailure    = scammander.CommandFailure
   type CommandFailureNEL = NonEmptyList[CommandFailure]
+
+  type CommandSuccess = scammander.CommandSuccess[Result]
+  val CommandSuccess: scammander.CommandSuccess.type = scammander.CommandSuccess
 
   type CommandError = scammander.CommandError
   val CommandError: scammander.CommandError.type = scammander.CommandError
@@ -105,23 +103,18 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   //Commands and parameters
 
-  /**
-    * The base class for a command. Extend from this if you want more control over a command.
-    */
-  abstract class Command[Sender, Param](implicit val userValidator: UserValidator[Sender], val par: Parameter[Param]) {
+  abstract class InnerCommand[Sender, Param](
+      implicit
+      _userValidator: UserValidator[Sender],
+      _par: Parameter[Param]
+  ) extends scammander.ComplexCommand[F, Sender, Param, RootSender, RunExtra, TabExtra, Result, StaticChildCommand] {
 
-    def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess]
-
-    def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): F[Seq[String]] =
-      par.suggestions(source, extra).runA(strArgs)
-
-    def usage(source: RootSender): F[String] = par.usage(source)
-
-    def children: Set[ChildCommand[_, _]] = Set.empty
-
-    lazy val childrenMap: Map[String, StaticChildCommand[_, _]] =
-      children.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
+    override def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): F[Seq[String]] =
+      _par.suggestions(source, extra).runA(strArgs)
   }
+
+  type Command[Sender, Param] = InnerCommand[Sender, Param]
+
   object Command {
 
     /**
@@ -263,33 +256,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     def usageError(msg: String, pos: Int): CommandUsageError = CommandUsageError(msg, pos)
   }
 
-  /**
-    * A parameter for a command. Can convert a list of arguments into a given type.
-    * @tparam A The parsed value.
-    */
-  @implicitNotFound("Could not find a parameter for ${A}. Have you tried using OnlyOne")
-  trait Parameter[A] {
+  type Parameter[A] = InnerParameter[A]
 
-    /**
-      * The name of the parameter. Will be used in usage.
-      */
-    def name: String
-
-    /**
-      * Parse a list of arguments into the type of this parameter.
-      * @param source The command source.
-      * @param extra Extra platform specific info about the command.
-      * @return A command step with the remaining arguments, and the parsed type.
-      */
-    def parse(source: RootSender, extra: RunExtra): SF[A]
-
-    /**
-      * Returns the suggestions for a parameter.
-      * @param source The command source.
-      * @param extra Extra platform specific info about the command.
-      * @return A list of the remaining arguments, and the suggestions.
-      */
-    def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]]
+  trait InnerParameter[A] extends scammander.ComplexParameter[F, A, RootSender, RunExtra, TabExtra] {
 
     /**
       * The usage for this command.

@@ -40,8 +40,8 @@ import net.katsstuff.scammander.{ScammanderBase, ScammanderHelper}
 
 trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Location[World]]] {
 
-  override protected type Result                            = Int
-  override protected type StaticChildCommand[Sender, Param] = SpongeCommandWrapper[Sender, Param]
+  override type Result                            = Int
+  override type StaticChildCommand[Sender, Param] = SpongeCommandWrapper[Sender, Param]
 
   override protected val defaultCommandSuccess: Int = 1
 
@@ -108,7 +108,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Loc
 
   case class SpongeCommandWrapper[Sender, Param](command: Command[Sender, Param], info: CommandInfo)
       extends CommandCallable
-      with SharedStaticChildCommand[Sender, Param] {
+      with BaseStaticChildCommand[Sender, Param] {
 
     override def process(source: CommandSource, arguments: String): CommandResult = {
       val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
