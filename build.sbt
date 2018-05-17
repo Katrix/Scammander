@@ -1,6 +1,6 @@
 lazy val commonSettings = Seq(
   organization := "net.katsstuff",
-  scalaVersion := "2.12.4",
+  scalaVersion := "2.12.6",
   crossScalaVersions := Seq("2.11.11", scalaVersion.value),
   scalacOptions ++= Seq(
     "-deprecation",
@@ -10,7 +10,8 @@ lazy val commonSettings = Seq(
     "-Yno-adapted-args",
     "-Ywarn-dead-code",
     "-Ywarn-unused-import",
-    "-Ypartial-unification"
+    "-Ypartial-unification",
+    "-language:higherKinds"
   ),
   addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6"),
   //Fixes repository not specified error
