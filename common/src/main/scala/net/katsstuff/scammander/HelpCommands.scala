@@ -12,25 +12,25 @@ trait HelpCommands[F[_], RootSender, RunExtra, TabExtra] {
 
   type Title
 
-  def sendMultipleCommandHelp(title: Title, source: RootSender, commands: Set[ChildCommand[_, _]]): F[CommandSuccess]
+  def sendMultipleCommandHelp(title: Title, source: RootSender, commands: Set[ChildCommand]): F[CommandSuccess]
 
   def sendCommandHelp(
       title: Title,
       source: RootSender,
-      command: StaticChildCommand[_, _],
+      command: StaticChildCommand,
       path: List[String]
   ): F[CommandSuccess]
 
-  def helpCommand(title: Title, commands: => Set[ChildCommand[_, _]]): Command[RootSender, ZeroOrMore[String]] =
+  def helpCommand(title: Title, commands: => Set[ChildCommand]): Command[RootSender, ZeroOrMore[String]] =
     new Command[RootSender, ZeroOrMore[String]]() {
-      private lazy val commandMap: Map[String, StaticChildCommand[_, _]] =
+      private lazy val commandMap: Map[String, StaticChildCommand] =
         commands.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
 
       def getCommandOrError(
-          commandMap: Map[String, StaticChildCommand[_, _]],
+          commandMap: Map[String, StaticChildCommand],
           acc: List[String],
           name: String
-      ): F[(List[String], StaticChildCommand[_, _])] =
+      ): F[(List[String], StaticChildCommand)] =
         commandMap
           .get(name)
           .toF(s"No command named $name")
@@ -45,7 +45,7 @@ trait HelpCommands[F[_], RootSender, RunExtra, TabExtra] {
 
             val childCommandStep = first.flatMap { fst =>
               import cats.instances.list._
-              Foldable[List].foldLeftM[F, String, (List[String], StaticChildCommand[_, _])](tail.toList, fst) {
+              Foldable[List].foldLeftM[F, String, (List[String], StaticChildCommand)](tail.toList, fst) {
                 case ((acc, wrapper), child) =>
                   getCommandOrError(wrapper.command.childrenMap, acc, child)
               }

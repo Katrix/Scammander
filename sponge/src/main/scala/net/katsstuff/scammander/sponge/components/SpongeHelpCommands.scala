@@ -27,7 +27,7 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F, CommandSource, Unit, Opti
   override def sendMultipleCommandHelp(
       title: Text,
       source: CommandSource,
-      commands: Set[ChildCommand[_, _]]
+      commands: Set[ChildCommand]
   ): F[CommandSuccess] = {
     val pages = PaginationList.builder()
     pages.title(title)
@@ -54,7 +54,7 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F, CommandSource, Unit, Opti
   override def sendCommandHelp(
       title: Text,
       source: CommandSource,
-      command: StaticChildCommand[_, _],
+      command: StaticChildCommand,
       path: List[String]
   ): F[CommandSuccess] = {
     if (command.testPermission(source)) {
@@ -72,7 +72,7 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F, CommandSource, Unit, Opti
       source: CommandSource,
       commandName: String,
       fullCommandName: String,
-      command: StaticChildCommand[_, _],
+      command: StaticChildCommand,
       detail: Boolean,
       indent: Int = 0,
       isIndentEnd: Boolean = false
