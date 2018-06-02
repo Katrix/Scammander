@@ -5,14 +5,7 @@ import scala.language.higherKinds
 /**
   * The base class for a command. Extend from this if you want full control over a command.
   */
-trait ComplexCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand <: ComplexBaseStaticChildCommand[
-  F,
-  RootSender,
-  RunExtra,
-  TabExtra,
-  Result,
-  StaticChildCommand
-]] {
+trait ComplexCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand] {
 
   def runRootArgs(source: RootSender, extra: RunExtra, args: List[RawCmdArg]): F[CommandSuccess[Result]]
 
