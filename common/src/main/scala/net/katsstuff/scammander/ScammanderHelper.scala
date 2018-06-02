@@ -49,12 +49,12 @@ object ScammanderHelper {
   def dropFirstArg[F[_]](
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
   ): StateT[F, List[RawCmdArg], Seq[String]] =
-    StateT
-      .modifyF[F, List[RawCmdArg]] { xs =>
+    for {
+      _ <- StateT.modifyF[F, List[RawCmdArg]] { xs =>
         if (xs.isEmpty) notEnoughArgsErrorF
-        else F.pure(xs.tail)
+        else xs.tail.pure
       }
-      .map(_ => Nil)
+    } yield Nil
 
   def getPos[F[_]: Applicative]: StateT[F, List[RawCmdArg], Int] =
     StateT.inspect[F, List[RawCmdArg], Int](_.headOption.fold(-1)(_.start))
@@ -174,15 +174,13 @@ object ScammanderHelper {
   ): StateT[F, List[RawCmdArg], A] = {
     require(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
 
+    def usageError(arg: RawCmdArg) =
+      F.raiseError(NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
+
     for {
       arg <- firstArgAndDrop
-      res <- StateT.liftF(
-        choices
-          .get(arg.content.toLowerCase(Locale.ROOT))
-          .fold[F[A]](
-            F.raiseError(NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
-          )(F.pure)
-      )
+      optValue = choices.get(arg.content.toLowerCase(Locale.ROOT))
+      res <- StateT.liftF(optValue.fold[F[A]](usageError(arg)(F.pure(_))))
     } yield res
   }
 

@@ -138,8 +138,10 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
           for {
             xs <- ScammanderHelper.getArgs[F]
             withEmpty <- {
-              if (xs.size == 1 && xs.head.content.isEmpty) res.transformF { fa =>
-                F.handleError(fa)(_ => (xs, Vector.empty))
+              if (xs.size == 1 && xs.head.content.isEmpty) {
+                res.transformF { fa =>
+                  F.handleError(fa)(_ => (xs, Vector.empty))
+                }
               } else res
             }
           } yield ZeroOrMore(withEmpty)
@@ -162,7 +164,7 @@ trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
     override val name: String = param.name
 
     override def parse(source: RootSender, extra: RunExtra): SF[Option[A]] = {
-      val parse = param.parse(source, extra).map[Option[A]](Some.apply)
+      val parse = param.parse(source, extra).map(_.some)
       ScammanderHelper.withFallbackState(parse, SF.pure(None))
     }
 

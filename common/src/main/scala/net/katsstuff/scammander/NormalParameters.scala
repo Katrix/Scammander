@@ -25,6 +25,8 @@ import java.time.format.DateTimeParseException
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util.{Locale, UUID}
 
+import cats.syntax.all._
+
 import scala.language.higherKinds
 import scala.util.{Failure, Success, Try}
 
@@ -86,15 +88,13 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
         arg <- ScammanderHelper.firstArgAndDrop[F]
         res <- Command.liftEitherToSF(
           tryToEither(
-            Try(new URL(arg.content))
-              .flatMap { url =>
-                Try {
-                  url.toURI //Checks validity
-                  url
-                }
+            Try(new URL(arg.content)).flatMap { url =>
+              Try {
+                url.toURI //Checks validity
+                url
               }
-          ).left
-            .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
+            }
+          ).leftMap(e => Command.syntaxErrorNel(e.getMessage, arg.start))
         )
       } yield res
 
@@ -125,8 +125,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
                 case _: DateTimeParseException =>
                   Try(LocalDateTime.of(LocalDate.parse(arg.content), LocalTime.MIDNIGHT))
               }
-          ).left
-            .map(_ => Command.syntaxErrorNel("Invalid date-time!", arg.start))
+          ).leftMap(_ => Command.syntaxErrorNel("Invalid date-time!", arg.start))
         )
       } yield res
 
@@ -160,8 +159,7 @@ trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
           } else s
 
           Command.liftEitherToSF(
-            tryToEither(Try(Duration.parse(usedS))).left
-              .map(e => Command.syntaxErrorNel(e.getMessage, arg.start))
+            tryToEither(Try(Duration.parse(usedS))).leftMap(e => Command.syntaxErrorNel(e.getMessage, arg.start))
           )
         }
       } yield res
