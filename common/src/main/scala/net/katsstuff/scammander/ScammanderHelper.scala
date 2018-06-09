@@ -175,12 +175,12 @@ object ScammanderHelper {
     require(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
 
     def usageError(arg: RawCmdArg) =
-      F.raiseError(NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
+      F.raiseError[A](NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
 
     for {
       arg <- firstArgAndDrop
       optValue = choices.get(arg.content.toLowerCase(Locale.ROOT))
-      res <- StateT.liftF(optValue.fold[F[A]](usageError(arg)(F.pure(_))))
+      res <- StateT.liftF(optValue.fold[F[A]](usageError(arg))(F.pure))
     } yield res
   }
 
