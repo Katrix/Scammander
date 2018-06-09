@@ -130,7 +130,7 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
               }
 
               NonEmptyList.fromList(matchingIndices).fold(F.pure((xs, Nil: Seq[String]))) {
-                case NonEmptyList((false, singleIdx), Nil) => F.pure((xs, Seq(flagName)))
+                case NonEmptyList((false, _), Nil) => F.pure((xs, Seq(flagName)))
                 case NonEmptyList((true, singleIdx), Nil)  => F.pure((xs.patch(singleIdx, Nil, 1), Nil))
                 case more                                  => F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx._2)))
               }

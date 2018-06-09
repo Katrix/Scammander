@@ -4,14 +4,20 @@ lazy val commonSettings = Seq(
   crossScalaVersions := Seq("2.11.11", scalaVersion.value),
   scalacOptions ++= Seq(
     "-deprecation",
+    "-encoding",
+    "utf-8",
+    "-explaintypes",
     "-feature",
     "-unchecked",
+    "-Xcheckinit",
     "-Xlint",
     "-Yno-adapted-args",
-    "-Ywarn-dead-code",
-    "-Ywarn-unused-import",
     "-Ypartial-unification",
-    "-language:higherKinds"
+    "-Ywarn-dead-code",
+    "-Ywarn-infer-any",
+    "-Ywarn-nullary-override",
+    "-Ywarn-nullary-unit",
+    "-Ywarn-unused"
   ),
   addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6"),
   //Fixes repository not specified error
