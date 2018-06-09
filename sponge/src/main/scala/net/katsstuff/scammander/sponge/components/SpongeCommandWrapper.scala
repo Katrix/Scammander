@@ -39,7 +39,7 @@ case class SpongeCommandWrapper[F[_]](
         throw new CommandPermissionException
       }
     } else {
-      val res = command.runRootArgs(source, (), args)
+      val res = command.runRaw(source, (), args)
 
       runComputation(res) match {
         case Right(CommandSuccess(count)) => CommandResult.successCount(count)

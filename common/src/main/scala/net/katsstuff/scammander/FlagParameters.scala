@@ -28,8 +28,7 @@ import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import shapeless.Witness
 
-trait FlagParameters[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
   /**
     * Parses a flag with a value followed by it.

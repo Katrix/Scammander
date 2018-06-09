@@ -26,8 +26,7 @@ import cats.data.StateT
 import cats.syntax.all._
 import shapeless._
 
-trait ParameterDeriver[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+trait ParameterDeriver[F[_]] { self: ScammanderBase[F] =>
 
   implicit def hConsParam[H, T <: HList](
       implicit hParam: Lazy[Parameter[H]],

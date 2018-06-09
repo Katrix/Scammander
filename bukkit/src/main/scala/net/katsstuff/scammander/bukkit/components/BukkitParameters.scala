@@ -16,8 +16,8 @@ import shapeless.Witness
 
 trait BukkitParameters[F[_]] {
   self: BukkitBase[F]
-    with NormalParameters[F, CommandSender, BukkitExtra, BukkitExtra]
-    with HelperParameters[F, CommandSender, BukkitExtra, BukkitExtra] =>
+    with NormalParameters[F]
+    with HelperParameters[F] =>
 
   implicit val playerHasName: HasName[Player]               = HasName.instance((a: Player) => a.getName)
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = HasName.instance((a: OfflinePlayer) => a.getName)

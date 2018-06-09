@@ -38,7 +38,7 @@ case class BukkitCommandWrapper[F[_]](
         }
       } else {
         val extra = BukkitExtra(bukkitCommand, label)
-        val res   = command.runRootArgs(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
+        val res   = command.runRaw(source, extra, ScammanderHelper.stringToRawArgsQuoted(args.mkString(" ")))
 
         runComputation(res) match {
           case Right(CommandSuccess(result)) => result

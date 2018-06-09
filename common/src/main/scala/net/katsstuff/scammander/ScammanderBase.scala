@@ -30,7 +30,7 @@ import cats.{Monad, MonadError, ~>}
 import net.katsstuff.scammander
 import shapeless._
 
-trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
+trait ScammanderBase[F[_]] {
 
   implicit def F: MonadError[F, CommandFailureNEL]
 
@@ -39,6 +39,9 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
   val FtoSF: F ~> SF = StateT.liftK[F, List[RawCmdArg]]
 
+  type RootSender
+  type RunExtra
+  type TabExtra
   type Result
   type StaticChildCommand <: BaseStaticChildCommand
 
@@ -55,7 +58,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
     StaticChildCommand
   ]
 
-  type ChildCommand = scammander.ComplexChildCommand[F, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
+  type ChildCommand = scammander.ComplexChildCommand[F, StaticChildCommand]
   val ChildCommand: ComplexChildCommand.type = scammander.ComplexChildCommand
 
   type UserValidator[A] = ComplexUserValidator[F, A, RootSender]
@@ -108,7 +111,7 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
       par: Parameter[Param]
   ) extends ComplexCommand {
 
-    override def runRootArgs(source: RootSender, extra: RunExtra, args: List[RawCmdArg]): F[CommandSuccess] =
+    override def runRaw(source: RootSender, extra: RunExtra, args: List[RawCmdArg]): F[CommandSuccess] =
       for {
         sender <- userValidator.validate(source)
         param  <- par.parse(source, extra).runA(args)
@@ -117,8 +120,8 @@ trait ScammanderBase[F[_], RootSender, RunExtra, TabExtra] {
 
     def run(source: Sender, extra: RunExtra, arg: Param): F[CommandSuccess]
 
-    override def suggestions(source: RootSender, extra: TabExtra, strArgs: List[RawCmdArg]): F[Seq[String]] =
-      par.suggestions(source, extra).runA(strArgs)
+    override def suggestions(source: RootSender, extra: TabExtra, args: List[RawCmdArg]): F[Seq[String]] =
+      par.suggestions(source, extra).runA(args)
 
     override def usage(source: RootSender): F[String] = par.usage(source)
   }

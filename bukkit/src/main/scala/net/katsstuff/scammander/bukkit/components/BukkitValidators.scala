@@ -12,8 +12,7 @@ import org.bukkit.{Location, OfflinePlayer}
 import cats.syntax.all._
 import shapeless.{TypeCase, Typeable}
 
-trait BukkitValidators[F[_]] {
-  self: BukkitBase[F] =>
+trait BukkitValidators[F[_]] { self: BukkitBase[F] =>
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player => player.pure

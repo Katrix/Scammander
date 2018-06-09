@@ -25,8 +25,7 @@ import scala.language.higherKinds
 import cats.data.NonEmptyList
 import cats.syntax.all._
 
-trait HelperParameters[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
 
   /**
     * Many parameters parse Set[A]. This type converts that into a single A.

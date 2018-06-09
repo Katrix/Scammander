@@ -11,12 +11,12 @@ import org.spongepowered.api.world.{Location, World}
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 
 import cats.syntax.all._
-import net.katsstuff.scammander.{OrParameters, ScammanderBase, ScammanderHelper}
+import net.katsstuff.scammander.{OrParameters, ScammanderHelper}
 import shapeless._
 
 trait SpongeOrParameter[F[_]] {
-  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]]
-    with OrParameters[F, CommandSource, Unit, Option[Location[World]]]
+  self: SpongeBase[F]
+    with OrParameters[F]
     with SpongeValidators[F] =>
 
   /**

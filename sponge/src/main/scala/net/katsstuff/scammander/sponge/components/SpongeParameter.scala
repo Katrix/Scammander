@@ -26,14 +26,14 @@ import com.flowpowered.math.vector.Vector3d
 
 import cats.data.NonEmptyList
 import cats.syntax.all._
-import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderBase, ScammanderHelper}
+import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderHelper}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
 import shapeless.{TypeCase, Typeable, Witness}
 
 trait SpongeParameter[F[_]] {
-  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]]
-    with NormalParameters[F, CommandSource, Unit, Option[Location[World]]]
-    with HelperParameters[F, CommandSource, Unit, Option[Location[World]]]
+  self: SpongeBase[F]
+    with NormalParameters[F]
+    with HelperParameters[F]
     with SpongeValidators[F] =>
 
   implicit val playerHasName: HasName[Player]                   = HasName.instance((a: Player) => a.getName)

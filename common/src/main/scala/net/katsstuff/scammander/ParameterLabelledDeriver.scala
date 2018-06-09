@@ -26,9 +26,7 @@ import cats.syntax.all._
 import shapeless._
 import shapeless.labelled.FieldType
 
-trait ParameterLabelledDeriver[F[_], RootSender, RunExtra, TabExtra]
-    extends ParameterDeriver[F, RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+trait ParameterLabelledDeriver[F[_]] extends ParameterDeriver[F] { self: ScammanderBase[F] =>
 
   object autoderivation {
     implicit def autoGenParam[A, Gen](

@@ -29,8 +29,11 @@ import org.spongepowered.api.world.{Location, World}
 import cats.arrow.FunctionK
 import net.katsstuff.scammander.ScammanderBase
 
-trait SpongeBase[F[_]] extends ScammanderBase[F, CommandSource, Unit, Option[Location[World]]] {
+trait SpongeBase[F[_]] extends ScammanderBase[F] {
 
+  override type RootSender         = CommandSource
+  override type RunExtra           = Unit
+  override type TabExtra           = Option[Location[World]]
   override type Result             = Int
   override type StaticChildCommand = SpongeCommandWrapper[F]
 

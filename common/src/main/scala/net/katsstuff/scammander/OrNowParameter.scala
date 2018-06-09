@@ -6,10 +6,10 @@ import scala.language.higherKinds
 
 import cats.syntax.all._
 
-trait OrNowParameter[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra]
-    with OrParameters[F, RootSender, RunExtra, TabExtra]
-    with NormalParameters[F, RootSender, RunExtra, TabExtra] =>
+trait OrNowParameter[F[_]] {
+  self: ScammanderBase[F]
+    with OrParameters[F]
+    with NormalParameters[F] =>
 
   /**
     * Given some parsed time, alternatively returns now instead.

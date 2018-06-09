@@ -30,8 +30,7 @@ import cats.syntax.all._
 import scala.language.higherKinds
 import scala.util.{Failure, Success, Try}
 
-trait NormalParameters[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
 
   private def tryToEither[B](tried: Try[B]): Either[Throwable, B] = tried match {
     case Success(b) => Right(b)

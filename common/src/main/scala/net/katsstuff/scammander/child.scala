@@ -2,7 +2,7 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-case class ComplexChildCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand](
+case class ComplexChildCommand[F[_], StaticChildCommand](
     aliases: Set[String],
     command: StaticChildCommand
 )

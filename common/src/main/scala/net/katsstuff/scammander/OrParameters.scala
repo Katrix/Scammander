@@ -24,8 +24,7 @@ import scala.language.higherKinds
 
 import cats.syntax.all._
 
-trait OrParameters[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra] =>
+trait OrParameters[F[_]] { self: ScammanderBase[F] =>
 
   /**
     * A class which can parse a normal parameter, or can optionally be filled

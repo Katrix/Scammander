@@ -8,12 +8,15 @@ import cats.data.NonEmptyList
 class ScammanderSpec
     extends FunSuite
     with Matchers
-    with ScammanderBaseAll[Either[NonEmptyList[CommandFailure], ?], Unit, Unit, Unit] {
+    with ScammanderBaseAll[Either[NonEmptyList[CommandFailure], ?]] {
 
+
+  override type RootSender = Unit
+  override type RunExtra = Unit
+  override type TabExtra = Unit
   override type Result                   = Unit
-  override type StaticChildCommand[Sender, Param] = DummyStaticChildCommand[Sender, Param]
-  case class DummyStaticChildCommand[Sender, Param](command: Command[Sender, Param])
-      extends BaseStaticChildCommand[Sender, Param]
+  override type StaticChildCommand = DummyStaticChildCommand
+  case class DummyStaticChildCommand(command: ComplexCommand) extends BaseStaticChildCommand
 
   override protected val defaultCommandSuccess: Unit = ()
 

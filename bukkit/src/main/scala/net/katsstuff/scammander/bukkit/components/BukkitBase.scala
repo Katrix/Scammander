@@ -29,8 +29,11 @@ import org.bukkit.plugin.java.JavaPlugin
 import cats.arrow.FunctionK
 import net.katsstuff.scammander.ScammanderBase
 
-trait BukkitBase[F[_]] extends ScammanderBase[F, CommandSender, BukkitExtra, BukkitExtra] {
+trait BukkitBase[F[_]] extends ScammanderBase[F] {
 
+  override type RootSender         = CommandSender
+  override type RunExtra           = BukkitExtra
+  override type TabExtra           = BukkitExtra
   override type Result             = Boolean
   override type StaticChildCommand = ChildCommandExtra[F]
 

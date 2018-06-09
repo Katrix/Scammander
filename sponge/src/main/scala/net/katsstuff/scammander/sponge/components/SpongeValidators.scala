@@ -4,7 +4,6 @@ import java.net.InetAddress
 
 import scala.language.higherKinds
 
-import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.command.source.{ProxySource, RemoteSource}
 import org.spongepowered.api.entity.Entity
 import org.spongepowered.api.entity.living.player.{Player, User}
@@ -13,11 +12,9 @@ import org.spongepowered.api.world.{Locatable, Location, World}
 import com.flowpowered.math.vector.Vector3d
 
 import cats.syntax.all._
-import net.katsstuff.scammander.ScammanderBase
 import shapeless._
 
-trait SpongeValidators[F[_]] {
-  self: ScammanderBase[F, CommandSource, Unit, Option[Location[World]]] =>
+trait SpongeValidators[F[_]] { self: SpongeBase[F] =>
 
   implicit val playerSender: UserValidator[Player] = UserValidator.mkValidator {
     case player: Player     => player.pure

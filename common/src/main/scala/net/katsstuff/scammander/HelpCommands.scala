@@ -5,10 +5,10 @@ import scala.language.higherKinds
 import cats.Foldable
 import cats.syntax.all._
 
-trait HelpCommands[F[_], RootSender, RunExtra, TabExtra] {
-  self: ScammanderBase[F, RootSender, RunExtra, TabExtra]
-    with NormalParameters[F, RootSender, RunExtra, TabExtra]
-    with HelperParameters[F, RootSender, RunExtra, TabExtra] =>
+trait HelpCommands[F[_]] {
+  self: ScammanderBase[F]
+    with NormalParameters[F]
+    with HelperParameters[F] =>
 
   type Title
 
