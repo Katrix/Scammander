@@ -370,13 +370,14 @@ trait ScammanderBase[F[_]] {
   /**
     * Represents a named command. If one of these are in the implicit scope,
     * you can use a [[DynamicCommand]] in you command.
-    * @param names The names for the command
-    * @param command A function that returns the command itself
-    * @param identifier A type level identifier for the command
-    * @tparam Args The arguments needed to use this command
-    * @tparam Identifier A type level identifier for the command
-    * @tparam Sender The sender type of the command
-    * @tparam Param The parameter type for the command
+    * @param names The names for the command. If this represents a command tree,
+    *              then these are the names of all the commands in the current level.
+    * @param command A function that returns the command itself.
+    * @param identifier A type level identifier for the command.
+    * @tparam Args The arguments needed to use this command.
+    * @tparam Identifier A type level identifier for the command.
+    * @tparam Sender The sender type of the command.
+    * @tparam Param The parameter type for the command.
     */
   case class NamedCommand[Args, Identifier, Sender, Param](
       names: Seq[String],
@@ -384,6 +385,11 @@ trait ScammanderBase[F[_]] {
       identifier: Identifier
   )
 
+  /**
+    * Use this method to get the type T which represents a dynamic command.
+    * @param command The function which gives back a command.
+    * @param identifier The identifier for the command.
+    */
   def dynamicCommandOf[Args, Identifier, Sender, Param](
       command: Args => Command[Sender, Param],
       identifier: Identifier
@@ -393,6 +399,9 @@ trait ScammanderBase[F[_]] {
     type T = DynamicCommand[Args, Identifier, Sender, Param]
   }
 
+  /**
+    * Like [[NamedCommand]] but parsed and includes a validator and parameter.
+    */
   case class DynamicCommand[Args, Identifier, Sender, Param](
       names: Seq[String],
       command: Args => Command[Sender, Param],
@@ -420,6 +429,119 @@ trait ScammanderBase[F[_]] {
       override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), cmd.names)
     }
+
+  /**
+    * Like [[NamedCommand]] but can be used with [[ComplexCommand]]s, and
+    * completely hands over the execution. This parameter does not consume arguments.
+    * @param names The names for the command. If this represents a command tree,
+    *              then these are the names of all the commands in the current level.
+    * @param command A function that returns the command itself.
+    * @param identifier A type level identifier for the command.
+    * @tparam Args The arguments needed to use this command.
+    * @tparam Identifier A type level identifier for the command.
+    */
+  case class HandoverComplexCommandExecution[Args, Identifier](
+      names: Seq[String],
+      command: Args => ComplexCommand,
+      identifier: Identifier
+  )
+
+  /**
+    * Represents the result of executing a command with [[HandoverComplexCommandExecution]].
+    * Use this as you parameter type.
+    * @tparam Identifier The identifier for the command.
+    */
+  case class ComplexCommandExecution[Identifier](result: CommandSuccess)
+
+  implicit def handoverComplexCommandExecutionParameter[Args, Identifier](
+      implicit cmd: HandoverComplexCommandExecution[Args, Identifier],
+      parameter: Parameter[Args]
+  ): Parameter[ComplexCommandExecution[Identifier]] = new Parameter[ComplexCommandExecution[Identifier]] {
+
+    override val name: String = cmd.names.mkString("|")
+
+    override def parse(source: RootSender, extra: RunExtra): SF[ComplexCommandExecution[Identifier]] =
+      for {
+        args    <- parameter.parse(source, extra)
+        parsed  <- ScammanderHelper.parse(name, cmd.names.map(_ -> cmd).toMap)
+        rawArgs <- ScammanderHelper.getArgs[F]
+        runF = parsed.command(args).runRaw(source, extra, rawArgs)
+        res <- Command.liftFtoSF(runF)
+      } yield ComplexCommandExecution[Identifier](res)
+
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = {
+      val commandSuggestions = for {
+        args    <- parameter.parse(source, tabExtraToRunExtra(extra))
+        parsed  <- ScammanderHelper.parse(name, cmd.names.map(_ -> cmd).toMap)
+        rawArgs <- ScammanderHelper.getArgs[F]
+        suggestionsF = parsed.command(args).suggestions(source, extra, rawArgs)
+        res <- Command.liftFtoSF(suggestionsF)
+      } yield res
+
+      ScammanderHelper.withFallbackState(
+        commandSuggestions,
+        ScammanderHelper.fallbackSuggestions(
+          parameter.suggestions(source, extra),
+          ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), cmd.names)
+        )
+      )
+    }
+  }
+
+  /**
+    * Executes a command like [[HandoverComplexCommandExecution]], but behaves move like [[Named]].
+    * This parameter consume arguments. Think of it like a type level <* operation
+    *
+    * @param names The names for the command. If this represents a command tree,
+    *              then these are the names of all the commands in the current level.
+    * @param command A function that returns the command itself.
+    * @param identifier A type level identifier for the command.
+    * @tparam Args The arguments needed to use this command.
+    * @tparam Identifier A type level identifier for the command.
+    * @tparam Sender The sender type of the command.
+    * @tparam Param The parameter type for the command.
+    */
+  case class HandoverCommandExecution[Args, Identifier, Sender, Param](
+      names: Seq[String],
+      command: Args => Command[Sender, Param],
+      identifier: Identifier
+  )
+
+  /**
+    * Represents the result of executing a command with [[HandoverCommandExecution]].
+    * Use this as you parameter type.
+    * @tparam Identifier The identifier for the command.
+    */
+  case class CommandExecution[Identifier](result: CommandSuccess)
+
+  implicit def handoverCommandExecutionParameter[Args, Identifier, Sender, Param](
+      implicit cmd: HandoverCommandExecution[Args, Identifier, Sender, Param],
+      cmdArgsParameter: Parameter[Args],
+      validator: UserValidator[Sender],
+      cmdParamParameter: Parameter[Param]
+  ): Parameter[CommandExecution[Identifier]] = new Parameter[CommandExecution[Identifier]] {
+
+    override val name: String = cmd.names.mkString("|")
+
+    override def parse(source: RootSender, extra: RunExtra): SF[CommandExecution[Identifier]] =
+      for {
+        args     <- cmdArgsParameter.parse(source, extra)
+        parsed   <- ScammanderHelper.parse(name, cmd.names.map(_ -> cmd).toMap)
+        cmdParam <- cmdParamParameter.parse(source, extra)
+        sender   <- Command.liftFtoSF(validator.validate(source))
+        runF = parsed.command(args).run(sender, extra, cmdParam)
+        res <- Command.liftFtoSF(runF)
+      } yield CommandExecution[Identifier](res)
+
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+      ScammanderHelper.fallbackSuggestions(
+        ScammanderHelper.fallbackSuggestions(
+          cmdArgsParameter.suggestions(source, extra),
+          ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), cmd.names)
+        ),
+        cmdParamParameter.suggestions(source, extra)
+      )
+  }
 
   implicit val rawCmdArgsParam: Parameter[List[RawCmdArg]] = new Parameter[List[RawCmdArg]] {
 

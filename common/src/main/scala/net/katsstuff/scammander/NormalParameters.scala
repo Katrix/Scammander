@@ -76,7 +76,14 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
   implicit val doubleParam: Parameter[Double] = primitiveParam("double", _.toDouble)
   implicit val boolParam: Parameter[Boolean]  = primitiveParam("boolean", _.toBoolean)
   implicit val stringParam: Parameter[String] = primitiveParam("string", identity)
-  implicit val unitParam: Parameter[Unit]     = primitiveParam("", _ => ())
+
+  implicit val unitParam: Parameter[Unit] = new Parameter[Unit] {
+    override def name: String = ""
+
+    override def parse(source: RootSender, extra: RunExtra): SF[Unit] = SF.pure(())
+
+    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = SF.pure(Nil)
+  }
 
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
 
