@@ -79,7 +79,6 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
               SF.pure(Seq(flagName))
             case NonEmptyList((true, singleIdx), Nil) =>
               val before = xs.take(singleIdx)
-              println(before)
               flagParam
                 .suggestions(source, extra)
                 .dimap[List[RawCmdArg], List[RawCmdArg]](_.drop(singleIdx + 1))(ys => before ::: ys)
