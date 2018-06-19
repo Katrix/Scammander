@@ -282,6 +282,9 @@ trait ScammanderBase[F[_]] {
   implicit class OptionOps[A](val option: Option[A]) {
     def toF(error: => String): F[A] =
       option.fold[F[A]](Command.errorF(error))(F.pure)
+
+    def toFLift(error: => F[String]): F[A] =
+      option.fold[F[A]](error.flatMap(Command.errorF(_)))(F.pure)
   }
 
   /**

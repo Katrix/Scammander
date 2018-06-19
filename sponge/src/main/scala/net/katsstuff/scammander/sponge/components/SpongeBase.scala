@@ -27,6 +27,7 @@ import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
 import cats.arrow.FunctionK
+import cats.syntax.all._
 import net.katsstuff.scammander.ScammanderBase
 
 trait SpongeBase[F[_]] extends ScammanderBase[F] {
@@ -64,39 +65,41 @@ trait SpongeBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating a help when registering a command.
     */
   object Help {
-    def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
-    def apply(text: Text): CommandSource => Option[Text]               = _ => Some(text)
-    val none: CommandSource => None.type                               = _ => None
+    def apply(f: CommandSource => F[Text]): CommandSource => F[Option[Text]] = f.andThen(_.map(Some.apply))
+    def apply(f: CommandSource => Text): CommandSource => F[Option[Text]]    = f.andThen(text => F.pure(Some(text)))
+    def apply(text: Text): CommandSource => F[Option[Text]]                  = _ => F.pure(Some(text))
+    val none: CommandSource => F[Option[Text]]                               = _ => F.pure(None)
   }
 
   /**
     * Helper for creating an description when registering a command.
     */
   object Description {
-    def apply(f: CommandSource => Text): CommandSource => Option[Text] = f andThen Some.apply
-    def apply(text: Text): CommandSource => Option[Text]               = _ => Some(text)
-    val none: CommandSource => None.type                               = _ => None
+    def apply(f: CommandSource => F[Text]): CommandSource => F[Option[Text]] = f.andThen(_.map(Some.apply))
+    def apply(f: CommandSource => Text): CommandSource => F[Option[Text]]    = f.andThen(text => F.pure(Some(text)))
+    def apply(text: Text): CommandSource => F[Option[Text]]                  = _ => F.pure(Some(text))
+    val none: CommandSource => F[Option[Text]]                               = _ => F.pure(None)
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
-    def toSponge(info: CommandInfo): SpongeCommandWrapper[F] =
+    def toSponge(info: CommandInfo[F]): SpongeCommandWrapper[F] =
       SpongeCommandWrapper(command, info, FunctionK.lift(runComputation))
-    def toChild(aliases: Seq[String], info: CommandInfo): ChildCommand =
+    def toChild(aliases: Seq[String], info: CommandInfo[F]): ChildCommand =
       ChildCommand(aliases.toSet, toSponge(info))
     def toChild(
         aliases: Seq[String],
-        permission: Option[String] = None,
-        help: CommandSource => Option[Text] = _ => None,
-        shortDescription: CommandSource => Option[Text] = _ => None
+        permission: Option[String] = Permission.none,
+        help: CommandSource => F[Option[Text]] = Help.none,
+        shortDescription: CommandSource => F[Option[Text]] = Description.none
     ): ChildCommand =
       ChildCommand(aliases.toSet, toSponge(CommandInfo(permission, help, shortDescription)))
 
     def register(
         plugin: AnyRef,
         aliases: Seq[String],
-        permission: Option[String] = None,
-        help: CommandSource => Option[Text] = _ => None,
-        shortDescription: CommandSource => Option[Text] = _ => None
+        permission: Option[String] = Permission.none,
+        help: CommandSource => F[Option[Text]] = Help.none,
+        shortDescription: CommandSource => F[Option[Text]] = Description.none
     ): Option[CommandMapping] =
       toSponge(CommandInfo(permission, help, shortDescription)).register(plugin, aliases)
   }

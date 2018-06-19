@@ -23,8 +23,8 @@ package net.katsstuff.scammander.sponge.components
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.text.Text
 
-case class CommandInfo(
-    permission: Option[String] = None,
-    help: CommandSource => Option[Text] = _ => None,
-    shortDescription: CommandSource => Option[Text] = _ => None
+case class CommandInfo[F[_]](
+    permission: Option[String],
+    help: CommandSource => F[Option[Text]],
+    shortDescription: CommandSource => F[Option[Text]]
 )

@@ -27,6 +27,7 @@ import org.bukkit.command.CommandSender
 import org.bukkit.plugin.java.JavaPlugin
 
 import cats.arrow.FunctionK
+import cats.syntax.all._
 import net.katsstuff.scammander.ScammanderBase
 
 trait BukkitBase[F[_]] extends ScammanderBase[F] {
@@ -62,27 +63,29 @@ trait BukkitBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating a help when registering a command.
     */
   object Help {
-    def apply(f: CommandSender => String): CommandSender => Option[String] = f andThen Some.apply
-    def apply(help: String): CommandSender => Option[String]               = _ => Some(help)
-    val none: CommandSender => None.type                                   = _ => None
+    def apply(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
+    def apply(f: CommandSender => String): CommandSender => F[Option[String]]    = f.andThen(text => F.pure(Some(text)))
+    def apply(text: String): CommandSender => F[Option[String]]                  = _ => F.pure(Some(text))
+    val none: CommandSender => F[Option[String]]                                 = _ => F.pure(None)
   }
 
   /**
     * Helper for creating an description when registering a command.
     */
   object Description {
-    def apply(f: CommandSender => String): CommandSender => Option[String] = f andThen Some.apply
-    def apply(description: String): CommandSender => Option[String]        = _ => Some(description)
-    val none: CommandSender => None.type                                   = _ => None
+    def apply(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
+    def apply(f: CommandSender => String): CommandSender => F[Option[String]]    = f.andThen(text => F.pure(Some(text)))
+    def apply(text: String): CommandSender => F[Option[String]]                  = _ => F.pure(Some(text))
+    val none: CommandSender => F[Option[String]]                                 = _ => F.pure(None)
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
     def toBukkit: BukkitCommandWrapper[F] = BukkitCommandWrapper(command, FunctionK.lift(runComputation))
     def toChild(
         aliases: Set[String],
-        permission: Option[String] = None,
-        help: CommandSender => Option[String] = _ => None,
-        description: CommandSender => Option[String] = _ => None
+        permission: Option[String] = Permission.none,
+        help: CommandSender => F[Option[String]] = Help.none,
+        description: CommandSender => F[Option[String]] = Description.none
     ): ChildCommand =
       ChildCommand(aliases, ChildCommandExtra(command.toBukkit, permission, help, description))
 

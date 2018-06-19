@@ -22,7 +22,7 @@ import net.katsstuff.scammander._
 
 case class SpongeCommandWrapper[F[_]](
     command: ComplexCommand[F, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[F]],
-    info: CommandInfo,
+    info: CommandInfo[F],
     runComputation: FunctionK[F, ({ type L[A] = Either[NonEmptyList[CommandFailure], A] })#L]
 )(implicit F: MonadError[F, NonEmptyList[CommandFailure]])
     extends CommandCallable
@@ -102,14 +102,17 @@ case class SpongeCommandWrapper[F[_]](
 
   override def testPermission(source: CommandSource): Boolean = info.permission.forall(source.hasPermission)
 
-  override def getShortDescription(source: CommandSource): Optional[Text] = info.shortDescription(source) match {
-    case Some(description) => Optional.of(description)
-    case None              => Optional.empty()
-  }
+  override def getShortDescription(source: CommandSource): Optional[Text] =
+    runComputation(info.shortDescription(source)) match {
+      case Left(nel)                => Optional.of(Text.of(nel.map(_.msg).toList.mkString("\n")))
+      case Right(Some(description)) => Optional.of(description)
+      case Right(None)              => Optional.empty()
+    }
 
-  override def getHelp(source: CommandSource): Optional[Text] = info.help(source) match {
-    case Some(help) => Optional.of(help)
-    case None       => Optional.empty()
+  override def getHelp(source: CommandSource): Optional[Text] = runComputation(info.help(source)) match {
+    case Left(nel)         => Optional.of(Text.of(nel.map(_.msg).toList.mkString("\n")))
+    case Right(Some(help)) => Optional.of(help)
+    case Right(None)       => Optional.empty()
   }
 
   override def getUsage(source: CommandSource): Text = Text.of(runComputation(command.usage(source)))

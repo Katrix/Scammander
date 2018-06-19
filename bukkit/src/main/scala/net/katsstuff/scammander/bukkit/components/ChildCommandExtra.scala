@@ -9,8 +9,8 @@ import net.katsstuff.scammander.{ComplexBaseStaticChildCommand, ComplexCommand}
 case class ChildCommandExtra[F[_]](
     commandWrapper: BukkitCommandWrapper[F],
     permission: Option[String],
-    help: CommandSender => Option[String],
-    description: CommandSender => Option[String]
+    help: CommandSender => F[Option[String]],
+    description: CommandSender => F[Option[String]]
 ) extends ComplexBaseStaticChildCommand[F, CommandSender, BukkitExtra, BukkitExtra, Boolean, ChildCommandExtra[F]] {
 
   override def command: ComplexCommand[F, CommandSender, BukkitExtra, BukkitExtra, Boolean, ChildCommandExtra[F]] =
