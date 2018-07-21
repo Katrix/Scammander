@@ -119,10 +119,7 @@ trait SpongeParameter[F[_]] {
     }
   }
 
-  implicit val playerParam: Parameter[Player] = new ProxyParameter[Player, OnlyOne[Player]] {
-    override def param: Parameter[OnlyOne[Player]]                         = Parameter[OnlyOne[Player]]
-    override def parse(source: CommandSource, extra: Unit): Parser[Player] = param.parse(source, extra).map(_.value)
-  }
+  implicit val playerParam: Parameter[Player] = Parameter[OnlyOne[Player]].map(_.value)
 
   implicit def entityParam[A <: Entity](implicit typeable: Typeable[A]): Parameter[Set[A]] = new Parameter[Set[A]] {
 

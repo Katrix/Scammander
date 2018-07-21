@@ -75,11 +75,7 @@ trait BukkitParameters[F[_]] {
       )
   }
 
-  implicit val playerParam: Parameter[Player] = new ProxyParameter[Player, OnlyOne[Player]] {
-    override def param: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
-    override def parse(source: CommandSender, extra: BukkitExtra): Parser[Player] =
-      param.parse(source, extra).map(_.value)
-  }
+  implicit val playerParam: Parameter[Player] = Parameter[OnlyOne[Player]].map(_.value)
 
   //TODO: Entity selector with NMS
 

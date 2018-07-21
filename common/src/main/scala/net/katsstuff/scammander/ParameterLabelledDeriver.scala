@@ -44,12 +44,7 @@ trait ParameterLabelledDeriver[F[_]] extends ParameterDeriver[F] { self: Scamman
   }
 
   def genParam[A, Gen](implicit gen: LabelledGeneric.Aux[A, Gen], genParam: Lazy[Parameter[Gen]]): Parameter[A] =
-    new ProxyParameter[A, Gen] {
-      override def param: Parameter[Gen] = genParam.value
-
-      override def parse(source: RootSender, extra: RunExtra): Parser[A] =
-        genParam.value.parse(source, extra).map(gen.from)
-    }
+    genParam.value.map(gen.from)
 
   implicit def hConsLabelledParam[HK <: Symbol, HV, T <: HList](
       implicit

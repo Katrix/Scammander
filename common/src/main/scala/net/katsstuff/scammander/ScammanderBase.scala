@@ -28,6 +28,7 @@ import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
 import cats._
 import net.katsstuff.scammander
+import net.katsstuff.scammander.ScammanderHelper.ParserF
 import shapeless._
 
 trait ScammanderBase[F[_]] {
@@ -295,13 +296,22 @@ trait ScammanderBase[F[_]] {
 
     override def name: String = param.name
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] = param.suggestions(source, extra)
+    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+      param.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = param.usage(source)
   }
 
   object Parameter {
     def apply[A](implicit param: Parameter[A]): Parameter[A] = param
+
+    implicit def paramInstance: Functor[Parameter] = new Functor[Parameter] {
+      override def map[A, B](fa: Parameter[A])(f: A => B): Parameter[B] = new ProxyParameter[B, A] {
+        override def param: Parameter[A] = fa
+
+        override def parse(source: RootSender, extra: RunExtra): Parser[B] = fa.parse(source, extra).map(f)
+}
+    }
 
     /**
       * Makes a parameter for a type which has names.
