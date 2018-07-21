@@ -65,7 +65,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating a help when registering a command.
     */
   object Help {
-    def apply(f: CommandSource => F[Text]): CommandSource => F[Option[Text]] = f.andThen(_.map(Some.apply))
+    def liftF(f: CommandSource => F[Text]): CommandSource => F[Option[Text]] = f.andThen(_.map(Some.apply))
     def apply(f: CommandSource => Text): CommandSource => F[Option[Text]]    = f.andThen(text => F.pure(Some(text)))
     def apply(text: Text): CommandSource => F[Option[Text]]                  = _ => F.pure(Some(text))
     val none: CommandSource => F[Option[Text]]                               = _ => F.pure(None)
@@ -75,7 +75,7 @@ trait SpongeBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating an description when registering a command.
     */
   object Description {
-    def apply(f: CommandSource => F[Text]): CommandSource => F[Option[Text]] = f.andThen(_.map(Some.apply))
+    def liftF(f: CommandSource => F[Text]): CommandSource => F[Option[Text]] = f.andThen(_.map(Some.apply))
     def apply(f: CommandSource => Text): CommandSource => F[Option[Text]]    = f.andThen(text => F.pure(Some(text)))
     def apply(text: Text): CommandSource => F[Option[Text]]                  = _ => F.pure(Some(text))
     val none: CommandSource => F[Option[Text]]                               = _ => F.pure(None)

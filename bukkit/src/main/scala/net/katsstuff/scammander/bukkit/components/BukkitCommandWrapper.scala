@@ -10,7 +10,7 @@ import org.bukkit.ChatColor
 import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
 import org.bukkit.plugin.java.JavaPlugin
 
-import cats.MonadError
+import cats.{Eval, MonadError}
 import cats.arrow.FunctionK
 import cats.data.NonEmptyList
 import cats.syntax.all._
@@ -102,7 +102,7 @@ case class BukkitCommandWrapper[F[_]](
           if (isParsed) true.pure else F.raiseError(NonEmptyList.one(CommandError("Not child")))
         }
         val childSuggestions =
-          ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(parsedArgs)
+          ScammanderHelper.suggestions(parse, Eval.now(command.childrenMap.keys)).runA(parsedArgs)
         val paramSuggestions = command.suggestions(sender, extra, parsedArgs)
         val ret = runComputation(childSuggestions) match {
           case Right(suggestions) => paramSuggestions.map(suggestions ++ _)

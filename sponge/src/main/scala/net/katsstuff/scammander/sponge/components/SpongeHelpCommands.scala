@@ -12,9 +12,7 @@ import org.spongepowered.api.text.format.TextStyles._
 import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters}
 
 trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
-  self: SpongeBase[F]
-    with NormalParameters[F]
-    with HelperParameters[F] =>
+  self: SpongeBase[F] with NormalParameters[F] with HelperParameters[F] =>
 
   override type Title = Text
 
@@ -85,8 +83,10 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
           .suggestCommand(fullCommandName)
       )
 
-    val commandHelp        = command.info.help(source)
-    val commandDescription = command.info.shortDescription(source)
+    val commandHelp = runComputation(command.info.help(source))
+      .fold(_ => Some(Text.of("Error when getting help")), identity)
+    val commandDescription = runComputation(command.info.shortDescription(source))
+      .fold(_ => Some(Text.of("Error when getting description")), identity)
 
     commandDescription.foreach(desc => helpBuilder.onHover(TextActions.showText(desc)))
 

@@ -14,7 +14,7 @@ import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
-import cats.MonadError
+import cats.{Eval, MonadError}
 import cats.arrow.FunctionK
 import cats.data.NonEmptyList
 import cats.syntax.all._
@@ -23,10 +23,10 @@ import net.katsstuff.scammander._
 case class SpongeCommandWrapper[F[_]](
     command: ComplexCommand[F, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[F]],
     info: CommandInfo[F],
-    runComputation: FunctionK[F, ({ type L[A] = Either[NonEmptyList[CommandFailure], A] })#L]
+    runComputation: FunctionK[F, Either[NonEmptyList[CommandFailure], ?]]
 )(implicit F: MonadError[F, NonEmptyList[CommandFailure]])
     extends CommandCallable
-    with ComplexBaseStaticChildCommand[F, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[F]] {
+    with ComplexStaticChildCommand[F, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[F]] {
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
@@ -89,7 +89,7 @@ case class SpongeCommandWrapper[F[_]](
         if (isParsed) true.pure else F.raiseError(NonEmptyList.one(CommandError("Not child")))
       }
       val childSuggestions =
-        ScammanderHelper.suggestions(parse, command.childrenMap.keys).runA(args)
+        ScammanderHelper.suggestions(parse, Eval.now(command.childrenMap.keys)).runA(args)
       val paramSuggestions = command.suggestions(source, Option(targetPosition), args)
       val ret = runComputation(childSuggestions) match {
         case Right(suggestions) => paramSuggestions.map(suggestions ++ _)

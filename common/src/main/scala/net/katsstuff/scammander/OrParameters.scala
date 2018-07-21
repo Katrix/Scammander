@@ -49,11 +49,11 @@ trait OrParameters[F[_]] { self: ScammanderBase[F] =>
   ): Parameter[OrSource[Base]] = new ProxyParameter[OrSource[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse(source: RootSender, extra: RunExtra): SF[OrSource[Base]] = {
-      val fa1: SF[Base]      = param.parse(source, extra)
-      lazy val fa2: SF[Base] = Command.liftFtoSF(validator.validate(source))
+    override def parse(source: RootSender, extra: RunExtra): Parser[OrSource[Base]] = {
+      val fa1: Parser[Base] = param.parse(source, extra)
+      val fa2: Parser[Base] = Command.liftFtoParser(validator.validate(source))
 
-      ScammanderHelper.withFallbackState(fa1, fa2).map(Or.apply)
+      ScammanderHelper.withFallbackParser(fa1, fa2).map(Or.apply)
     }
 
     override def usage(source: RootSender): F[String] =

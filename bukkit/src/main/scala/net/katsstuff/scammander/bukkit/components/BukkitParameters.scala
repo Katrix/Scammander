@@ -9,15 +9,13 @@ import org.bukkit.plugin.Plugin
 import org.bukkit.util.{Vector => BukkitVector}
 import org.bukkit.{Bukkit, OfflinePlayer, World}
 
+import cats.Eval
 import cats.syntax.all._
-
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderHelper}
 import shapeless.Witness
 
 trait BukkitParameters[F[_]] {
-  self: BukkitBase[F]
-    with NormalParameters[F]
-    with HelperParameters[F] =>
+  self: BukkitBase[F] with NormalParameters[F] with HelperParameters[F] =>
 
   implicit val playerHasName: HasName[Player]               = HasName.instance((a: Player) => a.getName)
   implicit val offlinePlayerHasName: HasName[OfflinePlayer] = HasName.instance((a: OfflinePlayer) => a.getName)
@@ -27,12 +25,12 @@ trait BukkitParameters[F[_]] {
   /**
     * A class to use for parameter that should require a specific permission.
     */
-  case class NeedPermission[S <: String, A](value: A)
+  case class NeedPermission[Perm <: String, A](value: A)
 
-  implicit def needPermissionParam[S <: String, A](
+  implicit def needPermissionParam[Perm <: String, A](
       implicit param0: Parameter[A],
-      w: Witness.Aux[S]
-  ): Parameter[NeedPermission[S, A]] = new ProxyParameter[NeedPermission[S, A], A] {
+      w: Witness.Aux[Perm]
+  ): Parameter[NeedPermission[Perm, A]] = new ProxyParameter[NeedPermission[Perm, A], A] {
     override def param: Parameter[A] = param0
 
     val perm: String = w.value
@@ -43,14 +41,14 @@ trait BukkitParameters[F[_]] {
     override def parse(
         source: CommandSender,
         extra: BukkitExtra
-    ): SF[NeedPermission[S, A]] =
+    ): Parser[NeedPermission[Perm, A]] =
       if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
       else ScammanderHelper.getPos[F].flatMapF(permError)
 
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): SF[Seq[String]] =
+    ): Parser[Seq[String]] =
       if (source.hasPermission(perm)) super.suggestions(source, extra)
       else ScammanderHelper.dropFirstArg[F]
   }
@@ -60,26 +58,26 @@ trait BukkitParameters[F[_]] {
 
     override val name: String = "player"
 
-    override def parse(source: CommandSender, extra: BukkitExtra): SF[Set[Player]] = {
+    override def parse(source: CommandSender, extra: BukkitExtra): Parser[Set[Player]] = {
       val normalNames = ScammanderHelper.parseMany[F, Player](name, Bukkit.getOnlinePlayers.asScala)
-      lazy val uuidPlayers = uuidParam
+      val uuidPlayers = uuidParam
         .parse(source, extra)
         .flatMapF(uuid => Option(Bukkit.getPlayer(uuid)).toF(s"No player with the UUID ${uuid.toString}"))
         .map(player => Set(player))
 
-      ScammanderHelper.withFallbackState(normalNames, uuidPlayers)
+      ScammanderHelper.withFallbackParser(normalNames, uuidPlayers)
     }
 
-    override def suggestions(source: CommandSender, extra: BukkitExtra): SF[Seq[String]] =
+    override def suggestions(source: CommandSender, extra: BukkitExtra): Parser[Seq[String]] =
       ScammanderHelper.suggestionsNamed[F, Player, Set[Player]](
         parse(source, tabExtraToRunExtra(extra)),
-        Bukkit.getOnlinePlayers.asScala
+        Eval.now(Bukkit.getOnlinePlayers.asScala)
       )
   }
 
   implicit val playerParam: Parameter[Player] = new ProxyParameter[Player, OnlyOne[Player]] {
     override def param: Parameter[OnlyOne[Player]] = Parameter[OnlyOne[Player]]
-    override def parse(source: CommandSender, extra: BukkitExtra): SF[Player] =
+    override def parse(source: CommandSender, extra: BukkitExtra): Parser[Player] =
       param.parse(source, extra).map(_.value)
   }
 
@@ -91,29 +89,29 @@ trait BukkitParameters[F[_]] {
     override def parse(
         source: CommandSender,
         extra: BukkitExtra
-    ): SF[Set[OfflinePlayer]] = {
-      val players: SF[Set[OfflinePlayer]]    = allPlayerParam.parse(source, extra).map(_.map(p => p: OfflinePlayer))
-      lazy val users: SF[Set[OfflinePlayer]] = ScammanderHelper.parseMany(name, Bukkit.getOfflinePlayers)
-      lazy val uuidUsers = uuidParam
+    ): Parser[Set[OfflinePlayer]] = {
+      val players: Parser[Set[OfflinePlayer]] = allPlayerParam.parse(source, extra).map(_.map(p => p: OfflinePlayer))
+      val users: Parser[Set[OfflinePlayer]]   = ScammanderHelper.parseMany(name, Bukkit.getOfflinePlayers)
+      val uuidUsers = uuidParam
         .parse(source, extra)
         .flatMapF { uuid =>
           Bukkit.getOfflinePlayers.find(_.getUniqueId == uuid).toF(s"No user with the UUID ${uuid.toString}")
         }
         .map(user => Set(user))
 
-      ScammanderHelper.withFallbackState(ScammanderHelper.withFallbackState(players, users), uuidUsers)
+      ScammanderHelper.withFallbackParser(ScammanderHelper.withFallbackParser(players, users), uuidUsers)
     }
 
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): SF[Seq[String]] = {
+    ): Parser[Seq[String]] = {
       val parse = ScammanderHelper.firstArgAndDrop.flatMapF[Boolean] { arg =>
         val res = Bukkit.getOfflinePlayers.exists(obj => HasName(obj).equalsIgnoreCase(arg.content))
         if (res) F.pure(true) else Command.errorF("Not parsed")
       }
 
-      ScammanderHelper.suggestionsNamed(parse, Bukkit.getOfflinePlayers)
+      ScammanderHelper.suggestionsNamed(parse, Eval.later(Bukkit.getOfflinePlayers.toSeq))
     }
   }
 
@@ -125,7 +123,7 @@ trait BukkitParameters[F[_]] {
     override def parse(
         source: CommandSender,
         extra: BukkitExtra
-    ): SF[BukkitVector] = {
+    ): Parser[BukkitVector] = {
       val relative = source match {
         case entity: Entity                  => Some(entity.getLocation)
         case blockSender: BlockCommandSender => Some(blockSender.getBlock.getLocation)
@@ -142,7 +140,7 @@ trait BukkitParameters[F[_]] {
     override def suggestions(
         source: CommandSender,
         extra: BukkitExtra
-    ): SF[Seq[String]] =
+    ): Parser[Seq[String]] =
       ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg *> ScammanderHelper.dropFirstArg
 
     private def hasNoPosError(pos: Int): CommandFailureNEL =
@@ -153,16 +151,16 @@ trait BukkitParameters[F[_]] {
         extra: BukkitExtra,
         relativeToOpt: Option[Double],
         arg: RawCmdArg
-    ): SF[Double] =
+    ): Parser[Double] =
       Command
-        .liftEitherToSF(relativeToOpt.toRight(hasNoPosError(arg.start)))
+        .liftEitherToParser(relativeToOpt.toRight(hasNoPosError(arg.start)))
         .flatMap { relativeTo =>
           val newArg = arg.content.substring(1)
-          if (newArg.isEmpty) SF.pure(relativeTo)
+          if (newArg.isEmpty) parser.pure(relativeTo)
           else
             doubleParam
               .parse(source, extra)
-              .contramap[List[RawCmdArg]](xs => xs.headOption.fold(xs)(head => head.copy(content = newArg) :: xs.tail))
+              .contramap[List[RawCmdArg]](xs => xs.headOption.fold(xs)(_.copy(content = newArg) :: xs.tail))
               .map(_ + relativeTo)
         }
 
@@ -170,7 +168,7 @@ trait BukkitParameters[F[_]] {
         source: CommandSender,
         extra: BukkitExtra,
         relativeToOpt: Option[Double]
-    ): SF[Double] =
+    ): Parser[Double] =
       for {
         arg <- ScammanderHelper.firstArg[F]
         res <- {

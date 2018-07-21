@@ -13,7 +13,7 @@ trait ComplexCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCo
 
   def usage(source: RootSender): F[String]
 
-  def children: Set[ComplexChildCommand[F, StaticChildCommand]] =
+  def children: Set[ComplexChildCommand[StaticChildCommand]] =
     Set.empty
 
   lazy val childrenMap: Map[String, StaticChildCommand] =

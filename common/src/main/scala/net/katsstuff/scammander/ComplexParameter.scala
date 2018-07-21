@@ -3,8 +3,6 @@ package net.katsstuff.scammander
 import scala.annotation.implicitNotFound
 import scala.language.higherKinds
 
-import cats.data.StateT
-
 /**
   * A parameter for a command. Can convert a list of arguments into a given type.
   * @tparam A The parsed value.
@@ -12,6 +10,9 @@ import cats.data.StateT
 @implicitNotFound("Could not find a parameter for ${A}. Have you tried using OnlyOne")
 trait ComplexParameter[F[_], A, RootSender, RunExtra, TabExtra] {
 
+  /**
+    * The name given to the parameter to show to users-
+    */
   def name: String
 
   /**
@@ -20,7 +21,7 @@ trait ComplexParameter[F[_], A, RootSender, RunExtra, TabExtra] {
     * @param extra Extra platform specific info about the command.
     * @return A command step with the remaining arguments, and the parsed type.
     */
-  def parse(source: RootSender, extra: RunExtra): StateT[F, List[RawCmdArg], A]
+  def parse(source: RootSender, extra: RunExtra): ScammanderHelper.ParserF[F, A]
 
   /**
     * Returns the suggestions for a parameter.
@@ -28,7 +29,7 @@ trait ComplexParameter[F[_], A, RootSender, RunExtra, TabExtra] {
     * @param extra Extra platform specific info about the command.
     * @return A list of the remaining arguments, and the suggestions.
     */
-  def suggestions(source: RootSender, extra: TabExtra): StateT[F, List[RawCmdArg], Seq[String]]
+  def suggestions(source: RootSender, extra: TabExtra): ScammanderHelper.ParserF[F, Seq[String]]
 
   /**
     * The usage for this command.

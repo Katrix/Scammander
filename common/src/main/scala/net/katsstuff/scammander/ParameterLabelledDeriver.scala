@@ -47,7 +47,7 @@ trait ParameterLabelledDeriver[F[_]] extends ParameterDeriver[F] { self: Scamman
     new ProxyParameter[A, Gen] {
       override def param: Parameter[Gen] = genParam.value
 
-      override def parse(source: RootSender, extra: RunExtra): SF[A] =
+      override def parse(source: RootSender, extra: RunExtra): Parser[A] =
         genParam.value.parse(source, extra).map(gen.from)
     }
 
@@ -60,22 +60,21 @@ trait ParameterLabelledDeriver[F[_]] extends ParameterDeriver[F] { self: Scamman
     new Parameter[FieldType[HK, HV] :: T] {
       override def name: String = s"${hName.value.name} ${tParam.value.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): SF[FieldType[HK, HV] :: T] =
+      override def parse(source: RootSender, extra: RunExtra): Parser[FieldType[HK, HV] :: T] =
         for {
           h <- hParam.value.parse(source, extra)
           t <- tParam.value.parse(source, extra)
         } yield labelled.field[HK](h) :: t
 
-      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-        ScammanderHelper.fallbackSuggestions(
+      override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+        ScammanderHelper.withFallbackSuggestions(
           hParam.value.suggestions(source, extra),
           tParam.value.suggestions(source, extra)
         )
 
       override def usage(source: RootSender): F[String] = {
-        lazy val hUsage = hName.value.name
-        val tUsage      = tParam.value.usage(source)
-
+        val hUsage = hName.value.name
+        val tUsage = tParam.value.usage(source)
         tUsage.map(t => if (t.isEmpty) s"<$hUsage>" else s"<$hUsage> $t")
       }
     }
@@ -89,18 +88,19 @@ trait ParameterLabelledDeriver[F[_]] extends ParameterDeriver[F] { self: Scamman
     new Parameter[FieldType[HK, HV] :+: T] {
       override def name: String = s"${hName.value.name}|${tParam.value.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): SF[FieldType[HK, HV] :+: T] = {
-        val hParse: SF[FieldType[HK, HV] :+: T]      = hParam.value.parse(source, extra).map(h => Inl(labelled.field[HK](h)))
-        lazy val tParse: SF[FieldType[HK, HV] :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
+      override def parse(source: RootSender, extra: RunExtra): Parser[FieldType[HK, HV] :+: T] = {
+        val hParse: Parser[FieldType[HK, HV] :+: T] =
+          hParam.value.parse(source, extra).map(h => Inl(labelled.field[HK](h)))
+        lazy val tParse: Parser[FieldType[HK, HV] :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
 
-        ScammanderHelper.withFallbackState(hParse, tParse)
+        ScammanderHelper.withFallbackParser(hParse, tParse)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = {
+      override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] = {
         val sfh = hParam.value.suggestions(source, extra)
         val sft = tParam.value.suggestions(source, extra)
 
-        SF.map2(sfh, sft)(_ ++ _)
+        parser.map2(sfh, sft)(_ ++ _)
       }
 
       override def usage(source: RootSender): F[String] = {

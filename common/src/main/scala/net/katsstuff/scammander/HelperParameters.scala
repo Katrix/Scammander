@@ -45,8 +45,8 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
     new ProxyParameter[OnlyOne[A], Set[A]] {
       override def param: Parameter[Set[A]] = setParam
 
-      override def parse(source: RootSender, extra: RunExtra): SF[OnlyOne[A]] =
-        SF.tuple2(ScammanderHelper.getPos, param.parse(source, extra)).transformF { fa =>
+      override def parse(source: RootSender, extra: RunExtra): Parser[OnlyOne[A]] =
+        parser.tuple2(ScammanderHelper.getPos, param.parse(source, extra)).transformF { fa =>
           fa.flatMap {
             case (rest, (_, set)) if set.size == 1 => F.pure((rest, OnlyOne(set.head)))
             case (_, (pos, set)) if set.isEmpty =>
@@ -61,15 +61,13 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
     * Parses the remaining arguments as a single string.
     */
   case class RemainingAsString(string: String) {
-    override def toString: String                = string
-    override def hashCode(): Int                 = string.hashCode
-    override def equals(obj: scala.Any): Boolean = string.equals(obj)
+    override def toString: String = string
   }
 
   implicit val remainingAsStringParam: Parameter[RemainingAsString] = new Parameter[RemainingAsString] {
     override def name = "strings..."
 
-    override def parse(source: RootSender, extra: RunExtra): SF[RemainingAsString] =
+    override def parse(source: RootSender, extra: RunExtra): Parser[RemainingAsString] =
       ScammanderHelper.getArgs
         .flatMapF { xs =>
           if (xs.nonEmpty && xs.head.content.nonEmpty)
@@ -79,8 +77,8 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
         }
         .modify(_ => Nil)
 
-    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
-      SF.pure(Nil: Seq[String]).modify(_ => Nil: List[RawCmdArg])
+    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+      parser.pure(Nil: Seq[String]).modify(_ => Nil: List[RawCmdArg])
   }
 
   /**
@@ -92,12 +90,12 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
       new Parameter[OneOrMore[A]] {
         override val name: String = s"${param.name}..."
 
-        override def parse(source: RootSender, extra: RunExtra): SF[OneOrMore[A]] = {
+        override def parse(source: RootSender, extra: RunExtra): Parser[OneOrMore[A]] = {
           import cats.instances.vector._
           val parse     = param.parse(source, extra)
           val stillMore = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          val res = SF.whileM[Vector, A](stillMore)(parse)
+          val res = parser.whileM[Vector, A](stillMore)(parse)
 
           res.flatMapF { vec =>
             NonEmptyList
@@ -106,12 +104,12 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
           }
         }
 
-        override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = {
+        override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] = {
           import cats.instances.vector._
           val mkSuggestions = param.suggestions(source, extra)
           val stillMore     = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          SF.whileM[Vector, Seq[String]](stillMore)(mkSuggestions).map(_.lastOption.getOrElse(Nil))
+          parser.whileM[Vector, Seq[String]](stillMore)(mkSuggestions).map(_.lastOption.getOrElse(Nil))
         }
 
         override def usage(source: RootSender): F[String] = s"<${param.name}...>".pure
@@ -127,12 +125,12 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
       new Parameter[ZeroOrMore[A]] {
         override val name: String = s"${param.name}..."
 
-        override def parse(source: RootSender, extra: RunExtra): SF[ZeroOrMore[A]] = {
+        override def parse(source: RootSender, extra: RunExtra): Parser[ZeroOrMore[A]] = {
           import cats.instances.vector._
           val parse     = param.parse(source, extra)
           val stillMore = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          val res = SF.whileM[Vector, A](stillMore)(parse)
+          val res = parser.whileM[Vector, A](stillMore)(parse)
 
           for {
             xs <- ScammanderHelper.getArgs[F]
@@ -146,12 +144,12 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
           } yield ZeroOrMore(withEmpty)
         }
 
-        override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] = {
+        override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] = {
           import cats.instances.vector._
           val mkSuggestions = param.suggestions(source, extra)
           val stillMore     = ScammanderHelper.getArgs[F].map(_.nonEmpty)
 
-          SF.whileM[Vector, Seq[String]](stillMore)(mkSuggestions).map(_.lastOption.getOrElse(Nil))
+          parser.whileM[Vector, Seq[String]](stillMore)(mkSuggestions).map(_.lastOption.getOrElse(Nil))
         }
 
         override def usage(source: RootSender): F[String] = s"[${param.name}...]".pure
@@ -162,12 +160,12 @@ trait HelperParameters[F[_]] { self: ScammanderBase[F] =>
 
     override val name: String = param.name
 
-    override def parse(source: RootSender, extra: RunExtra): SF[Option[A]] = {
+    override def parse(source: RootSender, extra: RunExtra): Parser[Option[A]] = {
       val parse = param.parse(source, extra).map(_.some)
-      ScammanderHelper.withFallbackState(parse, SF.pure(None))
+      ScammanderHelper.withFallbackParser(parse, parser.pure(None))
     }
 
-    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
       param.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = s"[${param.name}]".pure

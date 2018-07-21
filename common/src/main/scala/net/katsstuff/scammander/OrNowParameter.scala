@@ -20,12 +20,12 @@ trait OrNowParameter[F[_]] {
 
     override val name: String = dateTimeParam.name
 
-    override def parse(source: RootSender, extra: RunExtra): SF[LocalDateTime Or Now] =
+    override def parse(source: RootSender, extra: RunExtra): Parser[LocalDateTime Or Now] =
       ScammanderHelper
-        .withFallbackState(dateTimeParam.parse(source, extra), SF.pure(LocalDateTime.now()))
+        .withFallbackParser(dateTimeParam.parse(source, extra), parser.pure(LocalDateTime.now()))
         .map(Or.apply)
 
-    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
       dateTimeParam.suggestions(source, extra)
 
     override def usage(source: RootSender): F[String] = s"[$name]".pure

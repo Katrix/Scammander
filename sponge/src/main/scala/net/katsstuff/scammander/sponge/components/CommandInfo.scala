@@ -20,6 +20,8 @@
  */
 package net.katsstuff.scammander.sponge.components
 
+import scala.language.higherKinds
+
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.text.Text
 

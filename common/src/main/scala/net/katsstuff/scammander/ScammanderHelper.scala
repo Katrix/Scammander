@@ -27,9 +27,15 @@ import scala.language.higherKinds
 
 import cats.data.{NonEmptyList, StateT}
 import cats.syntax.all._
-import cats.{Applicative, MonadError}
+import cats.{Applicative, Eval, MonadError}
 
 object ScammanderHelper {
+
+  type ParserF[F[_], A] = StateT[F, List[RawCmdArg], A]
+
+  implicit private[scammander] class StringOps(private val string: String) extends AnyVal {
+    def toLowercaseRoot: String = string.toLowerCase(Locale.ROOT)
+  }
 
   private val spaceRegex = """\S+""".r
   //https://stackoverflow.com/questions/249791/regex-for-quoted-string-with-escaping-quotes
@@ -45,68 +51,6 @@ object ScammanderHelper {
     */
   def stringToRawArgs(arguments: String): List[RawCmdArg] =
     spaceRegex.findAllMatchIn(arguments).map(m => RawCmdArg(m.start, m.end, m.matched)).toList
-
-  def dropFirstArg[F[_]](
-      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], Seq[String]] =
-    for {
-      _ <- StateT.modifyF[F, List[RawCmdArg]] { xs =>
-        if (xs.isEmpty) notEnoughArgsErrorF
-        else xs.tail.pure
-      }
-    } yield Nil
-
-  def getPos[F[_]: Applicative]: StateT[F, List[RawCmdArg], Int] =
-    StateT.inspect[F, List[RawCmdArg], Int](_.headOption.fold(-1)(_.start))
-
-  def getArgs[F[_]: Applicative]: StateT[F, List[RawCmdArg], List[RawCmdArg]] =
-    StateT.get[F, List[RawCmdArg]]
-
-  def firstArgOpt[F[_]: Applicative]: StateT[F, List[RawCmdArg], Option[RawCmdArg]] =
-    StateT.inspect[F, List[RawCmdArg], Option[RawCmdArg]](_.headOption)
-
-  def firstArg[F[_]](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], RawCmdArg] =
-    firstArgOpt[F].flatMapF(_.filter(_.content.nonEmpty).fold[F[RawCmdArg]](notEnoughArgsErrorF)(_.pure))
-
-  def firstArgAndDrop[F[_]](
-      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], RawCmdArg] = firstArg[F] <* dropFirstArg[F]
-
-  def withFallbackState[F[_], A](first: StateT[F, List[RawCmdArg], A], second: => StateT[F, List[RawCmdArg], A])(
-      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], A] = {
-    StateT[F, List[RawCmdArg], A] { xs =>
-      F.handleErrorWith(first.run(xs)) { e1 =>
-        F.handleErrorWith(second.run(xs)) { e2 =>
-          F.raiseError(e1 ::: e2)
-        }
-      }
-    }
-  }
-
-  def fallbackSuggestions[F[_]](
-      first: StateT[F, List[RawCmdArg], Seq[String]],
-      second: StateT[F, List[RawCmdArg], Seq[String]]
-  )(implicit F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], Seq[String]] = {
-    StateT[F, List[RawCmdArg], Seq[String]] { xs =>
-      F.attemptT(first.run(xs))
-        .semiflatMap {
-          case (ys, fSuggestions) =>
-            F.attemptT(second.run(ys)).getOrElse((ys, fSuggestions))
-        }
-        .fold(F.raiseError[(List[RawCmdArg], Seq[String])], F.pure)
-        .flatten
-    }
-  }
-
-  def withFallback[F[_], A](first: F[A], second: => F[A])(
-      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): F[A] =
-    F.handleErrorWith(first) { e1 =>
-      F.handleErrorWith(second) { e2 =>
-        F.raiseError(e1 ::: e2)
-      }
-    }
 
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace
@@ -124,19 +68,74 @@ object ScammanderHelper {
         }
         .toList
 
-      if (arguments.endsWith(" ")) xs :+ RawCmdArg(arguments.length - 1, arguments.length - 1, "") else xs
+      val lastPos = arguments.length - 1
+      if (arguments.endsWith(" ")) xs :+ RawCmdArg(lastPos, lastPos, "") else xs
     }
   }
+
+  def dropFirstArg[F[_]](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): ParserF[F, Seq[String]] =
+    for {
+      _ <- StateT.modifyF[F, List[RawCmdArg]] { xs =>
+        if (xs.isEmpty) notEnoughArgsErrorF
+        else xs.tail.pure
+      }
+    } yield Nil
+
+  def getPos[F[_]: Applicative]: ParserF[F, Int] =
+    StateT.inspect(_.headOption.fold(-1)(_.start))
+
+  def getArgs[F[_]: Applicative]: ParserF[F, List[RawCmdArg]] =
+    StateT.get
+
+  def firstArgOpt[F[_]: Applicative]: ParserF[F, Option[RawCmdArg]] =
+    StateT.inspect(_.headOption)
+
+  def firstArg[F[_]](implicit F: MonadError[F, NonEmptyList[CommandFailure]]): ParserF[F, RawCmdArg] =
+    firstArgOpt[F].flatMapF(_.filter(_.content.nonEmpty).fold[F[RawCmdArg]](notEnoughArgsErrorF)(_.pure))
+
+  def firstArgAndDrop[F[_]](
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): ParserF[F, RawCmdArg] = firstArg <* dropFirstArg
+
+  def withFallbackParser[F[_], A](first: ParserF[F, A], second: ParserF[F, A])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): ParserF[F, A] =
+    StateT { xs =>
+      F.handleErrorWith(first.run(xs)) { e1 =>
+        F.handleErrorWith(second.run(xs)) { e2 =>
+          F.raiseError(e1 ::: e2)
+        }
+      }
+    }
+
+  def withFallbackSuggestions[F[_]](first: ParserF[F, Seq[String]], second: ParserF[F, Seq[String]])(
+      implicit F: MonadError[F, NonEmptyList[CommandFailure]]
+  ): ParserF[F, Seq[String]] =
+    StateT { xs =>
+      F.attemptT(first.run(xs))
+        .semiflatMap {
+          case (ys, fSuggestions) => F.attemptT(second.run(ys)).getOrElse((ys, fSuggestions))
+        }
+        .value
+        .rethrow
+    }
+
+  def withFallback[F[_], A](first: F[A], second: F[A])(implicit F: MonadError[F, NonEmptyList[CommandFailure]]): F[A] =
+    F.handleErrorWith(first) { e1 =>
+      F.handleErrorWith(second) { e2 =>
+        F.raiseError(e1 ::: e2)
+      }
+    }
 
   /**
     * Returns the suggestions for a command given the argument list and
     * all the possible string suggestions.
     */
-  def suggestions[F[_], E](parse: StateT[F, List[RawCmdArg], E], choices: => Iterable[String])(
+  def suggestions[F[_], E](parse: ParserF[F, E], choices: Eval[Iterable[String]])(
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], Seq[String]] = {
+  ): ParserF[F, Seq[String]] =
     for {
-      xs <- getArgs[F]
+      xs <- getArgs
       parsed <- StateT.liftF {
         //There is no point in getting suggestions if there are no args
         if (xs == Nil) notEnoughArgsErrorF[F, Either[NonEmptyList[CommandFailure], (List[RawCmdArg], E)]]
@@ -146,41 +145,42 @@ object ScammanderHelper {
     } yield {
       val content = xs.head.content
 
-      if (content.isEmpty) choices.toSeq
+      val evaluatedChoices = choices.value
+      if (content.isEmpty) evaluatedChoices.toSeq
       else {
-        val startsWith = choices.filter(_.startsWith(content)).toSeq
-        if (startsWith.lengthCompare(1) == 0 && choices.exists(_.equalsIgnoreCase(content)))
+        val startsWith = evaluatedChoices.filter(_.startsWith(content)).toSeq
+        if (startsWith.lengthCompare(1) == 0 && evaluatedChoices.exists(_.equalsIgnoreCase(content)))
           Nil
         else
           startsWith
       }
     }
-  }
 
   /**
     * Returns the suggestions for a command given the argument list and
     * all the possible suggestions.
     */
-  def suggestionsNamed[F[_], A, E](parse: StateT[F, List[RawCmdArg], E], choices: => Iterable[A])(
+  def suggestionsNamed[F[_], A, E](parse: ParserF[F, E], choices: Eval[Iterable[A]])(
       implicit named: HasName[A],
       F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], Seq[String]] = suggestions(parse, choices.map(named.apply))
+  ): ParserF[F, Seq[String]] =
+    suggestions(parse, choices.map(_.map((named.apply _).andThen(_.toLowercaseRoot))))
 
   /**
     * Parse a single paramter given the current argument list, and a map of the valid choices.
     */
   def parse[F[_], A](name: String, choices: Map[String, A])(
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], A] = {
-    require(choices.keys.forall(s => s.toLowerCase(Locale.ROOT) == s))
-
+  ): ParserF[F, A] = {
     def usageError(arg: RawCmdArg) =
-      F.raiseError[A](NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start)))
+      NonEmptyList.one(CommandUsageError(s"${arg.content} is not a valid $name", arg.start))
 
     for {
       arg <- firstArgAndDrop
-      optValue = choices.get(arg.content.toLowerCase(Locale.ROOT))
-      res <- StateT.liftF(optValue.fold[F[A]](usageError(arg))(F.pure))
+      optValue = choices
+        .filterKeys(_.equalsIgnoreCase(arg.content))
+        .headOption.map(_._2)
+      res <- StateT.liftF(F.fromOption(optValue, usageError(arg)))
     } yield res
   }
 
@@ -190,7 +190,7 @@ object ScammanderHelper {
   def parse[F[_], A](name: String, choices: Iterable[A])(
       implicit named: HasName[A],
       F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], A] = parse(name, choices.map(obj => named(obj) -> obj).toMap)
+  ): ParserF[F, A] = parse(name, choices.map(obj => named(obj).toLowercaseRoot -> obj).toMap)
 
   /**
     * Parse a set for a paramter given the current argument list, and a map of the valid choices.
@@ -198,7 +198,7 @@ object ScammanderHelper {
   //Based on PatternMatchingCommandElement in Sponge
   def parseMany[F[_], A](name: String, choices: Map[String, A])(
       implicit F: MonadError[F, NonEmptyList[CommandFailure]]
-  ): StateT[F, List[RawCmdArg], Set[A]] = {
+  ): ParserF[F, Set[A]] = {
     def formattedPattern(input: String) = {
       // Anchor matches to the beginning -- this lets us use find()
       val usedInput = if (!input.startsWith("^")) s"^$input" else input
@@ -217,11 +217,10 @@ object ScammanderHelper {
             case (k, v) if k.equalsIgnoreCase(unformattedPattern) => F.pure(Set(v))
           }
           .getOrElse {
-            if (filteredChoices.nonEmpty) {
+            if (filteredChoices.nonEmpty)
               F.pure(filteredChoices.values.toSet)
-            } else {
+            else
               F.raiseError(NonEmptyList.one(CommandUsageError(s"$unformattedPattern is not a valid $name", pos)))
-            }
           }
       }
     } yield res
@@ -234,5 +233,5 @@ object ScammanderHelper {
       name: String,
       choices: Iterable[A]
   )(implicit named: HasName[A], F: MonadError[F, NonEmptyList[CommandFailure]]): StateT[F, List[RawCmdArg], Set[A]] =
-    parseMany(name, choices.map(obj => named(obj).toLowerCase(Locale.ROOT) -> obj).toMap)
+    parseMany(name, choices.map(obj => named(obj).toLowercaseRoot -> obj).toMap)
 }

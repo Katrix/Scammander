@@ -63,7 +63,7 @@ trait BukkitBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating a help when registering a command.
     */
   object Help {
-    def apply(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
+    def liftF(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
     def apply(f: CommandSender => String): CommandSender => F[Option[String]]    = f.andThen(text => F.pure(Some(text)))
     def apply(text: String): CommandSender => F[Option[String]]                  = _ => F.pure(Some(text))
     val none: CommandSender => F[Option[String]]                                 = _ => F.pure(None)
@@ -73,7 +73,7 @@ trait BukkitBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating an description when registering a command.
     */
   object Description {
-    def apply(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
+    def liftF(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
     def apply(f: CommandSender => String): CommandSender => F[Option[String]]    = f.andThen(text => F.pure(Some(text)))
     def apply(text: String): CommandSender => F[Option[String]]                  = _ => F.pure(Some(text))
     val none: CommandSender => F[Option[String]]                                 = _ => F.pure(None)

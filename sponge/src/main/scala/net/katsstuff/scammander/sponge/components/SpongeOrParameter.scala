@@ -87,11 +87,11 @@ trait SpongeOrParameter[F[_]] {
   ): Parameter[OrTarget[Base]] = new ProxyParameter[OrTarget[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse(source: CommandSource, extra: Unit): SF[OrTarget[Base]] =
+    override def parse(source: CommandSource, extra: Unit): Parser[OrTarget[Base]] =
       for {
         pos <- ScammanderHelper.getPos
         res <- ScammanderHelper
-          .withFallbackState(parameter.parse(source, extra), Command.liftFtoSF(targeter.getTarget(source, pos)))
+          .withFallbackParser(parameter.parse(source, extra), Command.liftFtoParser(targeter.getTarget(source, pos)))
       } yield Or(res)
 
     override def usage(source: CommandSource): F[String] = {

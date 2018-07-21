@@ -44,7 +44,7 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
     private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
     override def name: String = s"$flagName ${flagParam.name}"
 
-    override def parse(source: RootSender, extra: RunExtra): SF[ValueFlag[Name, A]] =
+    override def parse(source: RootSender, extra: RunExtra): Parser[ValueFlag[Name, A]] =
       ScammanderHelper.getArgs[F].flatMap { xs =>
         val matchingIndices = xs.zipWithIndex.collect {
           case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
@@ -52,7 +52,7 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
         NonEmptyList
           .fromList(matchingIndices)
-          .fold[SF[ValueFlag[Name, A]]](SF.pure(ValueFlag(None))) {
+          .fold[Parser[ValueFlag[Name, A]]](parser.pure(ValueFlag(None))) {
             case NonEmptyList(singleIdx, Nil) =>
               val before = xs.take(singleIdx)
               flagParam
@@ -64,7 +64,7 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
           }
       }
 
-    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
       ScammanderHelper.getArgs[F].flatMap { xs =>
         val matchingIndices = xs.zipWithIndex.collect {
           case (RawCmdArg(_, _, content), idx)
@@ -74,9 +74,9 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
         NonEmptyList
           .fromList(matchingIndices)
-          .fold(SF.pure(Nil: Seq[String])) {
+          .fold(parser.pure(Nil: Seq[String])) {
             case NonEmptyList((false, _), Nil) =>
-              SF.pure(Seq(flagName))
+              parser.pure(Seq(flagName))
             case NonEmptyList((true, singleIdx), Nil) =>
               val before = xs.take(singleIdx)
               flagParam
@@ -104,7 +104,7 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
       override val name: String = flagName
 
-      override def parse(source: RootSender, extra: RunExtra): SF[BooleanFlag[Name]] =
+      override def parse(source: RootSender, extra: RunExtra): Parser[BooleanFlag[Name]] =
         ScammanderHelper.getArgs[F].transformF { fa =>
           fa.flatMap {
             case (xs, _) =>
@@ -119,7 +119,7 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
           }
         }
 
-      override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+      override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
         ScammanderHelper.getArgs[F].transformF { fa =>
           fa.flatMap {
             case (xs, _) =>
@@ -155,13 +155,13 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
     override val name: String = s"${paramParam.name} ${flagsParam.name}"
 
-    override def parse(source: RootSender, extra: RunExtra): SF[Flags[A, B]] =
+    override def parse(source: RootSender, extra: RunExtra): Parser[Flags[A, B]] =
       for {
         t1 <- flagsParam.parse(source, extra)
         t2 <- paramParam.parse(source, extra)
       } yield Flags(t1, t2)
 
-    override def suggestions(source: RootSender, extra: TabExtra): SF[Seq[String]] =
+    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
       for {
         flagSuggestions  <- flagsParam.suggestions(source, extra)
         paramSuggestions <- paramParam.suggestions(source, extra)
