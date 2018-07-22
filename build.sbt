@@ -49,7 +49,7 @@ lazy val publishSettings = Seq(
 
 lazy val noPublishSettings = Seq(publish := {}, publishLocal := {}, publishArtifact := false)
 
-lazy val scammanderVersion = "0.5"
+lazy val scammanderVersion = "0.6-SNAPSHOT"
 
 lazy val common = project.settings(
   commonSettings,
@@ -68,7 +68,7 @@ lazy val sponge =
       commonSettings,
       publishSettings,
       spongeMetaCreate := false,
-      name := s"scammanderSponge",
+      name := s"scammander-sponge",
       moduleName := s"${name.value}_sponge${spongeApiVersion.value.dropRight(2)}",
       version := scammanderVersion
     )
