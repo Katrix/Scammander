@@ -1,11 +1,18 @@
 package net.katsstuff.scammander
 
+import scala.language.higherKinds
+
 import cats.data.NonEmptyList
+import cats.syntax.all._
 
 class MiscHelperParamSpec extends ScammanderSpec {
 
-  implicit val sourceAsDouble: UserValidator[Double] = UserValidator.mkValidator(_ => Right(0D))
-  implicit val sourceAsMyObj: UserValidator[MyObj]   = UserValidator.mkValidator(_ => Right(MyObj(myObjName2, 2)))
+  implicit val sourceAsDouble: UserValidator[Double] = new UserValidator[Double] {
+    override def validate[F[_]: ParserError](sender: Unit): F[Double] = 0D.pure
+  }
+  implicit val sourceAsMyObj: UserValidator[MyObj] = new UserValidator[MyObj] {
+    override def validate[F[_]: ParserError](sender: Unit): F[MyObj] = MyObj(myObjName2, 2).pure
+  }
 
   test("An or source parameter should work when passed parameters") {
     parse[Double Or Source]("2.3") should contain(Or(2.3D))
