@@ -4,30 +4,30 @@ import scala.language.higherKinds
 
 import cats.Functor
 import cats.syntax.all._
+import net.katsstuff.scammander.ScammanderTypes.ParserError
 
 /**
   * A typeclass which helps convert a user into another type.
   */
-trait ComplexUserValidator[F[_], A, RootSender] {
+trait ComplexUserValidator[A, RootSender] {
 
   /**
     * Validates the sender.
     */
-  def validate(sender: RootSender): F[A]
+  def validate[F[_]: ParserError](sender: RootSender): F[A]
 }
 object ComplexUserValidator {
-  def apply[F[_], A, RootSender](
-      implicit validator: ComplexUserValidator[F, A, RootSender]
-  ): ComplexUserValidator[F, A, RootSender] = validator
+  def apply[A, RootSender](
+      implicit validator: ComplexUserValidator[A, RootSender]
+  ): ComplexUserValidator[A, RootSender] = validator
 
-  implicit def instanceForValidator[F[_], RootSender](
-      implicit F: Functor[F]
-  ): Functor[ComplexUserValidator[F, ?, RootSender]] = new Functor[ComplexUserValidator[F, ?, RootSender]] {
-    //noinspection ConvertExpressionToSAM
-    override def map[A, B](fa: ComplexUserValidator[F, A, RootSender])(
-        f: A => B
-    ): ComplexUserValidator[F, B, RootSender] = new ComplexUserValidator[F, B, RootSender] {
-      override def validate(sender: RootSender): F[B] = fa.validate(sender).map(f)
+  implicit def instanceForValidator[RootSender]: Functor[ComplexUserValidator[?, RootSender]] =
+    new Functor[ComplexUserValidator[?, RootSender]] {
+      //noinspection ConvertExpressionToSAM
+      override def map[A, B](fa: ComplexUserValidator[A, RootSender])(
+          f: A => B
+      ): ComplexUserValidator[B, RootSender] = new ComplexUserValidator[B, RootSender] {
+        override def validate[F[_]: ParserError](sender: RootSender): F[B] = fa.validate(sender).map(f)
+      }
     }
-  }
 }

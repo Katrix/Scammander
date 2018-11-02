@@ -1,14 +1,13 @@
 package net.katsstuff.scammander.bukkit.components
 
 import cats.MonadError
-import cats.data.NonEmptyList
-import net.katsstuff.scammander.CommandFailure
 
-trait BukkitBaseAllEither extends BukkitBaseAll[Either[NonEmptyList[CommandFailure], ?]] {
+trait BukkitBaseAllEither extends BukkitBaseAll {
 
-  override protected def runComputation[A](computation: Either[CommandFailureNEL, A]): Either[CommandFailureNEL, A] =
-    computation
+  type G[A] = Either[CommandFailureNEL, A]
 
-  implicit override def F: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
+  implicit protected def G: MonadError[Either[CommandFailureNEL, ?], CommandFailureNEL] =
     cats.instances.either.catsStdInstancesForEither
+
+  override protected def runG[A](computation: Either[CommandFailureNEL, A]): Either[CommandFailureNEL, A] = computation
 }

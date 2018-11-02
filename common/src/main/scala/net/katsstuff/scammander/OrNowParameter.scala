@@ -1,15 +1,13 @@
 package net.katsstuff.scammander
 
-import java.time.LocalDateTime
-
 import scala.language.higherKinds
+
+import java.time.LocalDateTime
 
 import cats.syntax.all._
 
-trait OrNowParameter[F[_]] {
-  self: ScammanderBase[F]
-    with OrParameters[F]
-    with NormalParameters[F] =>
+trait OrNowParameter {
+  self: ScammanderBase with OrParameters with NormalParameters =>
 
   /**
     * Given some parsed time, alternatively returns now instead.
@@ -20,14 +18,14 @@ trait OrNowParameter[F[_]] {
 
     override val name: String = dateTimeParam.name
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[LocalDateTime Or Now] =
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[LocalDateTime Or Now] =
       ScammanderHelper
-        .withFallbackParser(dateTimeParam.parse(source, extra), parser.pure(LocalDateTime.now()))
+        .withFallback(dateTimeParam.parse(source, extra), LocalDateTime.now().pure)
         .map(Or.apply)
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
       dateTimeParam.suggestions(source, extra)
 
-    override def usage(source: RootSender): F[String] = s"[$name]".pure
+    override def usage[F[_]: ParserError](source: RootSender): F[String] = s"[$name]".pure
   }
 }

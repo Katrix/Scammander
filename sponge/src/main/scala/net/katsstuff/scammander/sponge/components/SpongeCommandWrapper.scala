@@ -1,32 +1,35 @@
 package net.katsstuff.scammander.sponge.components
 
+import scala.language.higherKinds
+
 import java.util
 import java.util.Optional
-
 import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
-import scala.language.higherKinds
 
+import cats.Eval
+import cats.arrow.FunctionK
+import cats.data.{NonEmptyList, StateT}
+import cats.instances.either._
+import cats.mtl.instances.all._
+import cats.syntax.all._
+import net.katsstuff.scammander.ScammanderTypes.CommandFailureNEL
+import net.katsstuff.scammander._
 import org.spongepowered.api.Sponge
 import org.spongepowered.api.command._
 import org.spongepowered.api.command.args.ArgumentParseException
 import org.spongepowered.api.text.Text
 import org.spongepowered.api.world.{Location, World}
 
-import cats.{Eval, MonadError}
-import cats.arrow.FunctionK
-import cats.data.NonEmptyList
-import cats.syntax.all._
-import net.katsstuff.scammander._
+case class SpongeCommandWrapper[G[_]](
+    command: ComplexCommand[G, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[G]],
+    info: CommandInfo[G],
+    runG: FunctionK[G, Either[CommandFailureNEL, ?]]
+) extends CommandCallable
+    with ComplexStaticChildCommand[G, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[G]] {
 
-case class SpongeCommandWrapper[F[_]](
-    command: ComplexCommand[F, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[F]],
-    info: CommandInfo[F],
-    runComputation: FunctionK[F, Either[NonEmptyList[CommandFailure], ?]]
-)(implicit F: MonadError[F, NonEmptyList[CommandFailure]])
-    extends CommandCallable
-    with ComplexStaticChildCommand[F, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[F]] {
+  type Parser[A] = StateT[Either[CommandFailureNEL, ?], List[RawCmdArg], A]
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
@@ -39,9 +42,9 @@ case class SpongeCommandWrapper[F[_]](
         throw new CommandPermissionException
       }
     } else {
-      val res = command.runRaw(source, (), args)
+      val res = command.runRaw[Parser](source, ()).runA(args).flatMap(runG(_))
 
-      runComputation(res) match {
+      res match {
         case Right(CommandSuccess(count)) => CommandResult.successCount(count)
         case Left(NonEmptyList(CommandError(msg, true), Nil)) =>
           throw new CommandException(Text.of(msg).concat(Text.NEW_LINE).concat(getUsage(source)))
@@ -58,8 +61,9 @@ case class SpongeCommandWrapper[F[_]](
             else new CommandException(Text.of(msg))
           throw e
         case Left(nel) =>
-          val usage = if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage(source)}" else ""
-          val msg   = s"${nel.map(_.msg).toList.mkString("\n")}$usage" //TODO: Better error here
+          val usage =
+            if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage(source).getOrElse("<error>")}" else ""
+          val msg = s"${nel.map(_.msg).toList.mkString("\n")}$usage" //TODO: Better error here
           throw new CommandException(Text.of(msg))
       }
     }
@@ -82,40 +86,40 @@ case class SpongeCommandWrapper[F[_]](
     if (doChildCommand && childCommand.testPermission(source)) {
       childCommand.getSuggestions(source, args.tail.map(_.content).mkString(" "), targetPosition)
     } else {
-      val parse = ScammanderHelper.firstArgAndDrop.flatMapF[Boolean] { arg =>
+      val parse = ScammanderHelper.firstArgAndDrop[Parser].flatMapF[Boolean] { arg =>
         val isParsed =
           if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
           else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-        if (isParsed) true.pure else F.raiseError(NonEmptyList.one(CommandError("Not child")))
+        if (isParsed) true.pure else NonEmptyList.one(CommandError("Not child")).raiseError
       }
       val childSuggestions =
         ScammanderHelper.suggestions(parse, Eval.now(command.childrenMap.keys)).runA(args)
-      val paramSuggestions = command.suggestions(source, Option(targetPosition), args)
-      val ret = runComputation(childSuggestions) match {
+      val paramSuggestions = command.suggestions[Parser](source, Option(targetPosition)).runA(args)
+      val ret = childSuggestions match {
         case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
         case Left(_)            => paramSuggestions
       }
 
-      runComputation(ret).getOrElse(Nil).asJava
+      ret.getOrElse(Nil).asJava
     }
   }
 
   override def testPermission(source: CommandSource): Boolean = info.permission.forall(source.hasPermission)
 
   override def getShortDescription(source: CommandSource): Optional[Text] =
-    runComputation(info.shortDescription(source)) match {
+    runG(info.shortDescription(source)) match {
       case Left(nel)                => Optional.of(Text.of(nel.map(_.msg).toList.mkString("\n")))
       case Right(Some(description)) => Optional.of(description)
       case Right(None)              => Optional.empty()
     }
 
-  override def getHelp(source: CommandSource): Optional[Text] = runComputation(info.help(source)) match {
+  override def getHelp(source: CommandSource): Optional[Text] = runG(info.help(source)) match {
     case Left(nel)         => Optional.of(Text.of(nel.map(_.msg).toList.mkString("\n")))
     case Right(Some(help)) => Optional.of(help)
     case Right(None)       => Optional.empty()
   }
 
-  override def getUsage(source: CommandSource): Text = Text.of(runComputation(command.usage(source)))
+  override def getUsage(source: CommandSource): Text = Text.of(command.usage(source).getOrElse("<error>"))
 
   def register(plugin: AnyRef, aliases: Seq[String]): Option[CommandMapping] = {
     val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)

@@ -7,7 +7,7 @@ case class ComplexChildCommand[StaticChildCommand](
     command: StaticChildCommand
 )
 
-trait ComplexStaticChildCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand] {
+trait ComplexStaticChildCommand[G[_], RootSender, RunExtra, TabExtra, ResultTpe, StaticChildCommand] {
 
-  def command: ComplexCommand[F, RootSender, RunExtra, TabExtra, Result, StaticChildCommand]
+  def command: ComplexCommand[G, RootSender, RunExtra, TabExtra, ResultTpe, StaticChildCommand]
 }

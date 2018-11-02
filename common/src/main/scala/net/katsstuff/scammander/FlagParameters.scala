@@ -20,15 +20,15 @@
  */
 package net.katsstuff.scammander
 
-import java.util.Locale
-
 import scala.language.higherKinds
 
-import cats.data.{NonEmptyList, StateT}
+import java.util.Locale
+
+import cats.data.NonEmptyList
 import cats.syntax.all._
 import shapeless.Witness
 
-trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
+trait FlagParameters { self: ScammanderBase =>
 
   /**
     * Parses a flag with a value followed by it.
@@ -44,50 +44,49 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
     private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
     override def name: String = s"$flagName ${flagParam.name}"
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[ValueFlag[Name, A]] =
-      ScammanderHelper.getArgs[F].flatMap { xs =>
+    override def parse[F[_]](
+        source: RootSender,
+        extra: RunExtra
+    )(implicit S: ParserState[F], E: ParserError[F]): F[ValueFlag[Name, A]] =
+      S.get.flatMap { xs =>
         val matchingIndices = xs.zipWithIndex.collect {
           case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
         }
 
-        NonEmptyList
-          .fromList(matchingIndices)
-          .fold[Parser[ValueFlag[Name, A]]](parser.pure(ValueFlag(None))) {
-            case NonEmptyList(singleIdx, Nil) =>
-              val before = xs.take(singleIdx)
-              flagParam
-                .parse(source, extra)
-                .dimap[List[RawCmdArg], List[RawCmdArg]](_.drop(singleIdx + 1))(ys => before ::: ys)
-                .map(a => ValueFlag(Some(a)))
-            case more =>
-              StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx))))
-          }
+        NonEmptyList.fromList(matchingIndices).fold(ValueFlag[Name, A](None).pure) {
+          case NonEmptyList(singleIdx, Nil) =>
+            val before = xs.take(singleIdx)
+            S.modify(_.drop(singleIdx + 1)) *>
+              flagParam.parse(source, extra).map(a => ValueFlag[Name, A](Some(a))) <*
+              S.modify(ys => before ::: ys)
+          case more => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx)))
+        }
       }
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-      ScammanderHelper.getArgs[F].flatMap { xs =>
+    override def suggestions[F[_]](
+        source: RootSender,
+        extra: TabExtra
+    )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
+      S.get.flatMap { xs =>
         val matchingIndices = xs.zipWithIndex.collect {
           case (RawCmdArg(_, _, content), idx)
               if content.nonEmpty && flagName.startsWith(content.toLowerCase(Locale.ROOT)) =>
             (content.equalsIgnoreCase(flagName), idx)
         }
 
-        NonEmptyList
-          .fromList(matchingIndices)
-          .fold(parser.pure(Nil: Seq[String])) {
-            case NonEmptyList((false, _), Nil) =>
-              parser.pure(Seq(flagName))
-            case NonEmptyList((true, singleIdx), Nil) =>
-              val before = xs.take(singleIdx)
-              flagParam
-                .suggestions(source, extra)
-                .dimap[List[RawCmdArg], List[RawCmdArg]](_.drop(singleIdx + 1))(ys => before ::: ys)
-            case more =>
-              StateT.liftF(F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx._2))))
-          }
+        NonEmptyList.fromList(matchingIndices).fold((Nil: Seq[String]).pure) {
+          case NonEmptyList((false, _), Nil) => Seq(flagName).pure
+          case NonEmptyList((true, singleIdx), Nil) =>
+            val before = xs.take(singleIdx)
+            S.modify(_.drop(singleIdx + 1)) *>
+              flagParam.suggestions(source, extra) <*
+              S.modify(ys => before ::: ys)
+          case more => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx._2)))
+        }
       }
 
-    override def usage(source: RootSender): F[String] = flagParam.usage(source).map(fUsage => s"$flagName $fUsage")
+    override def usage[F[_]: ParserError](source: RootSender): F[String] =
+      flagParam.usage(source).map(fUsage => s"$flagName $fUsage")
   }
 
   /**
@@ -104,40 +103,40 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
       override val name: String = flagName
 
-      override def parse(source: RootSender, extra: RunExtra): Parser[BooleanFlag[Name]] =
-        ScammanderHelper.getArgs[F].transformF { fa =>
-          fa.flatMap {
-            case (xs, _) =>
-              val matchingIndices = xs.zipWithIndex.collect {
-                case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
-              }
+      override def parse[F[_]](
+          source: RootSender,
+          extra: RunExtra
+      )(implicit S: ParserState[F], E: ParserError[F]): F[BooleanFlag[Name]] =
+        S.get.flatMap { xs =>
+          val matchingIndices = xs.zipWithIndex.collect {
+            case (RawCmdArg(_, _, content), idx) if content.equalsIgnoreCase(flagName) => idx
+          }
 
-              NonEmptyList.fromList(matchingIndices).fold(F.pure((xs, BooleanFlag[Name](present = false)))) {
-                case NonEmptyList(singleIdx, Nil) => F.pure((xs.patch(singleIdx, Nil, 1), BooleanFlag(true)))
-                case more                         => F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx)))
-              }
+          NonEmptyList.fromList(matchingIndices).fold(BooleanFlag[Name](present = false).pure) {
+            case NonEmptyList(singleIdx, Nil) => S.set(xs.patch(singleIdx, Nil, 1)).as(BooleanFlag(true))
+            case more                         => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx)))
           }
         }
 
-      override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-        ScammanderHelper.getArgs[F].transformF { fa =>
-          fa.flatMap {
-            case (xs, _) =>
-              val matchingIndices = xs.zipWithIndex.collect {
-                case (RawCmdArg(_, _, content), idx)
-                    if content.nonEmpty && flagName.startsWith(content.toLowerCase(Locale.ROOT)) =>
-                  (content.equalsIgnoreCase(flagName), idx)
-              }
+      override def suggestions[F[_]](
+          source: RootSender,
+          extra: TabExtra
+      )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
+        S.get.flatMap { xs =>
+          val matchingIndices = xs.zipWithIndex.collect {
+            case (RawCmdArg(_, _, content), idx)
+                if content.nonEmpty && flagName.startsWith(content.toLowerCase(Locale.ROOT)) =>
+              (content.equalsIgnoreCase(flagName), idx)
+          }
 
-              NonEmptyList.fromList(matchingIndices).fold(F.pure((xs, Nil: Seq[String]))) {
-                case NonEmptyList((false, _), Nil) => F.pure((xs, Seq(flagName)))
-                case NonEmptyList((true, singleIdx), Nil)  => F.pure((xs.patch(singleIdx, Nil, 1), Nil))
-                case more                                  => F.raiseError(more.map(idx => Command.usageError(s"$flagName is already defined", idx._2)))
-              }
+          NonEmptyList.fromList(matchingIndices).fold((Nil: Seq[String]).pure) {
+            case NonEmptyList((false, _), Nil)        => Seq(flagName).pure
+            case NonEmptyList((true, singleIdx), Nil) => S.set(xs.patch(singleIdx, Nil, 1)).as(Nil)
+            case more                                 => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx._2)))
           }
         }
 
-      override def usage(source: RootSender): F[String] = flagName.pure
+      override def usage[F[_]: ParserError](source: RootSender): F[String] = flagName.pure
     }
 
   /**
@@ -155,13 +154,13 @@ trait FlagParameters[F[_]] { self: ScammanderBase[F] =>
 
     override val name: String = s"${paramParam.name} ${flagsParam.name}"
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[Flags[A, B]] =
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Flags[A, B]] =
       for {
         t1 <- flagsParam.parse(source, extra)
         t2 <- paramParam.parse(source, extra)
       } yield Flags(t1, t2)
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
       for {
         flagSuggestions  <- flagsParam.suggestions(source, extra)
         paramSuggestions <- paramParam.suggestions(source, extra)

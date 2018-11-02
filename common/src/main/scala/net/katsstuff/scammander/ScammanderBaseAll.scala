@@ -20,13 +20,11 @@
  */
 package net.katsstuff.scammander
 
-import scala.language.higherKinds
-
-trait ScammanderBaseAll[F[_]]
-    extends ScammanderBase[F]
-    with NormalParameters[F]
-    with ParameterLabelledDeriver[F]
-    with HelperParameters[F]
-    with FlagParameters[F]
-    with OrParameters[F]
-    with OrNowParameter[F]
+trait ScammanderBaseAll
+    extends ScammanderBase
+    with NormalParameters
+    with ParameterLabelledDeriver
+    with HelperParameters
+    with FlagParameters
+    with OrParameters
+    with OrNowParameter

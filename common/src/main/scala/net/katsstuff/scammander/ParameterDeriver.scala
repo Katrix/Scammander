@@ -22,11 +22,10 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.data.StateT
 import cats.syntax.all._
 import shapeless._
 
-trait ParameterDeriver[F[_]] { self: ScammanderBase[F] =>
+trait ParameterDeriver { self: ScammanderBase =>
 
   implicit def hConsParam[H, T <: HList](
       implicit hParam: Lazy[Parameter[H]],
@@ -34,23 +33,23 @@ trait ParameterDeriver[F[_]] { self: ScammanderBase[F] =>
   ): Parameter[H :: T] = new Parameter[H :: T] {
     override def name: String = s"${hParam.value.name} ${tParam.value.name}"
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[H :: T] =
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[H :: T] =
       for {
         h <- hParam.value.parse(source, extra)
         t <- tParam.value.parse(source, extra)
       } yield h :: t
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
       ScammanderHelper.withFallbackSuggestions(
         hParam.value.suggestions(source, extra),
         tParam.value.suggestions(source, extra)
       )
 
-    override def usage(source: RootSender): F[String] = {
+    override def usage[F[_]: ParserError](source: RootSender): F[String] = {
       val hUsage = hParam.value.usage(source)
       val tUsage = tParam.value.usage(source)
 
-      F.map2(hUsage, tUsage) { (h, t) =>
+      hUsage.map2(tUsage) { (h, t) =>
         if (t.isEmpty) h else s"$h $t"
       }
     }
@@ -59,13 +58,13 @@ trait ParameterDeriver[F[_]] { self: ScammanderBase[F] =>
   implicit val hNilParam: Parameter[HNil] = new Parameter[HNil] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[HNil] =
-      parser.pure(HNil)
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[HNil] =
+      (HNil: HNil).pure
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-      StateT.liftF(Command.errorF("Suggestions on HNil"))
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      Result.errorF("Suggestions on HNil")
 
-    override def usage(source: RootSender): F[String] = F.pure("")
+    override def usage[F[_]: ParserError](source: RootSender): F[String] = "".pure
   }
 
   implicit def cConsParam[H, T <: Coproduct](
@@ -75,25 +74,25 @@ trait ParameterDeriver[F[_]] { self: ScammanderBase[F] =>
     new Parameter[H :+: T] {
       override def name: String = s"${hParam.value.name}|${tParam.value.name}"
 
-      override def parse(source: RootSender, extra: RunExtra): Parser[H :+: T] = {
-        val hParse: Parser[H :+: T]      = hParam.value.parse(source, extra).map(Inl.apply)
-        lazy val tParse: Parser[H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
+      override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[H :+: T] = {
+        val hParse: F[H :+: T]      = hParam.value.parse(source, extra).map(Inl.apply)
+        lazy val tParse: F[H :+: T] = tParam.value.parse(source, extra).map(Inr.apply)
 
-        ScammanderHelper.withFallbackParser(hParse, tParse)
+        ScammanderHelper.withFallback(hParse, tParse)
       }
 
-      override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] = {
+      override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] = {
         val sfh = hParam.value.suggestions(source, extra)
         val sft = tParam.value.suggestions(source, extra)
 
-        parser.map2(sfh, sft)(_ ++ _)
+        sfh.map2(sft)(_ ++ _)
       }
 
-      override def usage(source: RootSender): F[String] = {
+      override def usage[F[_]: ParserError](source: RootSender): F[String] = {
         val hUsage = hParam.value.usage(source)
         val tUsage = tParam.value.usage(source)
 
-        F.map2(hUsage, tUsage) { (h, t) =>
+        hUsage.map2(tUsage) { (h, t) =>
           if (t.isEmpty) h else s"$h|$t"
         }
       }
@@ -102,12 +101,12 @@ trait ParameterDeriver[F[_]] { self: ScammanderBase[F] =>
   implicit val cNilParam: Parameter[CNil] = new Parameter[CNil] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[CNil] =
-      ScammanderHelper.getPos[F].flatMapF(pos => Command.syntaxErrorF("Could not parse argument", pos))
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[CNil] =
+      ScammanderHelper.getPos.flatMap(pos => Result.syntaxErrorF("Could not parse argument", pos))
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-      parser.pure(Nil)
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      (Nil: Seq[String]).pure
 
-    override def usage(source: RootSender): F[String] = "".pure
+    override def usage[F[_]: ParserError](source: RootSender): F[String] = "".pure
   }
 }

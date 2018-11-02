@@ -21,28 +21,29 @@
 package net.katsstuff.scammander.bukkit.components
 
 import scala.collection.JavaConverters._
-import scala.language.higherKinds
 
-import org.bukkit.command.CommandSender
-import org.bukkit.plugin.java.JavaPlugin
-
+import cats.Applicative
 import cats.arrow.FunctionK
 import cats.syntax.all._
 import net.katsstuff.scammander.ScammanderBase
+import org.bukkit.command.CommandSender
+import org.bukkit.plugin.java.JavaPlugin
 
-trait BukkitBase[F[_]] extends ScammanderBase[F] {
+trait BukkitBase extends ScammanderBase {
 
   override type RootSender         = CommandSender
   override type RunExtra           = BukkitExtra
   override type TabExtra           = BukkitExtra
-  override type Result             = Boolean
-  override type StaticChildCommand = ChildCommandExtra[F]
+  override type ResultTpe          = Boolean
+  override type StaticChildCommand = ChildCommandExtra[G]
+
+  implicit protected def G: Applicative[G]
 
   override protected val defaultCommandSuccess: Boolean = true
 
-  override protected def tabExtraToRunExtra(extra: BukkitExtra): BukkitExtra = extra
+  protected def runG[A](computation: G[A]): Either[CommandFailureNEL, A]
 
-  protected def runComputation[A](computation: F[A]): Either[CommandFailureNEL, A]
+  override protected def tabExtraToRunExtra(extra: BukkitExtra): BukkitExtra = extra
 
   /**
     * Helper for creating an alias when registering a command.
@@ -63,29 +64,30 @@ trait BukkitBase[F[_]] extends ScammanderBase[F] {
     * Helper for creating a help when registering a command.
     */
   object Help {
-    def liftF(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
-    def apply(f: CommandSender => String): CommandSender => F[Option[String]]    = f.andThen(text => F.pure(Some(text)))
-    def apply(text: String): CommandSender => F[Option[String]]                  = _ => F.pure(Some(text))
-    val none: CommandSender => F[Option[String]]                                 = _ => F.pure(None)
+    def liftF(f: CommandSender => G[String]): CommandSender => G[Option[String]] = f.andThen(_.map(Some.apply))
+    def apply(f: CommandSender => String): CommandSender => G[Option[String]]    = f.andThen(text => G.pure(Some(text)))
+    def apply(text: String): CommandSender => G[Option[String]]                  = _ => G.pure(Some(text))
+    val none: CommandSender => G[Option[String]]                                 = _ => G.pure(None)
   }
 
   /**
     * Helper for creating an description when registering a command.
     */
   object Description {
-    def liftF(f: CommandSender => F[String]): CommandSender => F[Option[String]] = f.andThen(_.map(Some.apply))
-    def apply(f: CommandSender => String): CommandSender => F[Option[String]]    = f.andThen(text => F.pure(Some(text)))
-    def apply(text: String): CommandSender => F[Option[String]]                  = _ => F.pure(Some(text))
-    val none: CommandSender => F[Option[String]]                                 = _ => F.pure(None)
+    def liftF(f: CommandSender => G[String]): CommandSender => G[Option[String]] = f.andThen(_.map(Some.apply))
+    def apply(f: CommandSender => String): CommandSender => G[Option[String]]    = f.andThen(text => G.pure(Some(text)))
+    def apply(text: String): CommandSender => G[Option[String]]                  = _ => G.pure(Some(text))
+    val none: CommandSender => G[Option[String]]                                 = _ => G.pure(None)
   }
 
   implicit class RichCommand[Sender, Param](val command: Command[Sender, Param]) {
-    def toBukkit: BukkitCommandWrapper[F] = BukkitCommandWrapper(command, FunctionK.lift(runComputation))
+    def toBukkit: BukkitCommandWrapper[G] =
+      BukkitCommandWrapper(command, λ[FunctionK[G, Either[CommandFailureNEL, ?]]](runG(_)))
     def toChild(
         aliases: Set[String],
         permission: Option[String] = Permission.none,
-        help: CommandSender => F[Option[String]] = Help.none,
-        description: CommandSender => F[Option[String]] = Description.none
+        help: CommandSender => G[Option[String]] = Help.none,
+        description: CommandSender => G[Option[String]] = Description.none
     ): ChildCommand =
       ChildCommand(aliases, ChildCommandExtra(command.toBukkit, permission, help, description))
 

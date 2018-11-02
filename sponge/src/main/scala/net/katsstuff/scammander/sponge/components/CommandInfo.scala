@@ -25,8 +25,8 @@ import scala.language.higherKinds
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.text.Text
 
-case class CommandInfo[F[_]](
+case class CommandInfo[G[_]](
     permission: Option[String],
-    help: CommandSource => F[Option[Text]],
-    shortDescription: CommandSource => F[Option[Text]]
+    help: CommandSource => G[Option[Text]],
+    shortDescription: CommandSource => G[Option[Text]]
 )

@@ -20,18 +20,19 @@
  */
 package net.katsstuff.scammander
 
+import scala.language.higherKinds
+
 import java.net.URL
 import java.time.format.DateTimeParseException
 import java.time.{Duration, LocalDate, LocalDateTime, LocalTime}
 import java.util.{Locale, UUID}
 
-import cats.syntax.all._
-import scala.language.higherKinds
 import scala.util.{Failure, Success, Try}
 
 import cats.Eval
+import cats.syntax.all._
 
-trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
+trait NormalParameters { self: ScammanderBase =>
 
   private def tryToEither[B](tried: Try[B]): Either[Throwable, B] = tried match {
     case Success(b) => Right(b)
@@ -41,31 +42,28 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
   def primitiveParam[A](parName: String, s: String => A): Parameter[A] = new Parameter[A] {
     override val name: String = parName
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[A] =
+    override def parse[F[_]: ParserState](source: RootSender, extra: RunExtra)(implicit E: ParserError[F]): F[A] =
       for {
-        arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- Command.liftEitherToParser(
+        arg <- ScammanderHelper.firstArgAndDrop
+        res <- E.fromEither(
           tryToEither(Try(s(arg.content)))
-            .leftMap(_ => Command.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
+            .leftMap(_ => Result.syntaxErrorNel(s"${arg.content} is not a valid $name", arg.start))
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-      ScammanderHelper.dropFirstArg[F]
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      ScammanderHelper.dropFirstArg
   }
 
-  def mkSingle[A](parName: String, parser: String => F[A], possibleSuggestions: Eval[Seq[String]]): Parameter[A] =
+  def mkSingle[A](parName: String, parser: String => A, possibleSuggestions: Eval[Seq[String]]): Parameter[A] =
     new Parameter[A] {
 
       override val name: String = parName
 
-      override def parse(source: RootSender, extra: RunExtra): Parser[A] =
-        for {
-          arg <- ScammanderHelper.firstArgAndDrop[F]
-          res <- Command.liftFtoParser(parser(arg.content))
-        } yield res
+      override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[A] =
+        ScammanderHelper.firstArgAndDrop.map(arg => parser(arg.content))
 
-      override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+      override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
         ScammanderHelper.suggestions(parse(source, tabExtraToRunExtra(extra)), possibleSuggestions)
     }
 
@@ -81,19 +79,20 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
   implicit val unitParam: Parameter[Unit] = new Parameter[Unit] {
     override def name: String = ""
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[Unit] = parser.pure(())
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Unit] = ().pure
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] = parser.pure(Nil)
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      (Nil: Seq[String]).pure
   }
 
   implicit val urlParam: Parameter[URL] = new Parameter[URL] {
 
     override val name: String = "url"
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[URL] =
+    override def parse[F[_]: ParserState](source: RootSender, extra: RunExtra)(implicit E: ParserError[F]): F[URL] =
       for {
-        arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- Command.liftEitherToParser(
+        arg <- ScammanderHelper.firstArgAndDrop
+        res <- E.fromEither(
           tryToEither(
             Try(new URL(arg.content)).flatMap { url =>
               Try {
@@ -101,12 +100,12 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
                 url
               }
             }
-          ).leftMap(e => Command.syntaxErrorNel(e.getMessage, arg.start))
+          ).leftMap(e => Result.syntaxErrorNel(e.getMessage, arg.start))
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-      ScammanderHelper.dropFirstArg[F]
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      ScammanderHelper.dropFirstArg
   }
 
   implicit val bigDecimalParam: Parameter[BigDecimal] = primitiveParam("decimal number", BigDecimal.apply)
@@ -118,10 +117,12 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
 
     override val name: String = "dataTime"
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[LocalDateTime] =
+    override def parse[F[_]: ParserState](source: RootSender, extra: RunExtra)(
+        implicit E: ParserError[F]
+    ): F[LocalDateTime] =
       for {
-        arg <- ScammanderHelper.firstArgAndDrop[F]
-        res <- Command.liftEitherToParser(
+        arg <- ScammanderHelper.firstArgAndDrop
+        res <- E.fromEither(
           tryToEither(
             Try(LocalDateTime.parse(arg.content))
               .recoverWith {
@@ -132,14 +133,14 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
                 case _: DateTimeParseException =>
                   Try(LocalDateTime.of(LocalDate.parse(arg.content), LocalTime.MIDNIGHT))
               }
-          ).leftMap(_ => Command.syntaxErrorNel("Invalid date-time", arg.start))
+          ).leftMap(_ => Result.syntaxErrorNel("Invalid date-time", arg.start))
         )
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
       for {
-        arg <- ScammanderHelper.firstArgOpt[F].map(_.fold("")(_.content))
-        _   <- ScammanderHelper.dropFirstArg[F]
+        arg <- ScammanderHelper.firstArgOpt.map(_.fold("")(_.content))
+        _   <- ScammanderHelper.dropFirstArg
       } yield {
         val date = LocalDateTime.now().withNano(0).toString
         if (date.startsWith(arg)) Seq(date) else Nil
@@ -150,9 +151,11 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
 
     override val name: String = "duration"
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[Duration] =
+    override def parse[F[_]: ParserState](source: RootSender, extra: RunExtra)(
+        implicit E: ParserError[F]
+    ): F[Duration] =
       for {
-        arg <- ScammanderHelper.firstArgAndDrop[F]
+        arg <- ScammanderHelper.firstArgAndDrop
         res <- {
           val s = arg.content.toUpperCase(Locale.ROOT)
 
@@ -165,13 +168,13 @@ trait NormalParameters[F[_]] { self: ScammanderBase[F] =>
             if (!s1.startsWith("P")) "P" + s1 else s1
           } else s
 
-          Command.liftEitherToParser(
-            tryToEither(Try(Duration.parse(usedS))).leftMap(e => Command.syntaxErrorNel(e.getMessage, arg.start))
+          E.fromEither(
+            tryToEither(Try(Duration.parse(usedS))).leftMap(e => Result.syntaxErrorNel(e.getMessage, arg.start))
           )
         }
       } yield res
 
-    override def suggestions(source: RootSender, extra: TabExtra): Parser[Seq[String]] =
-      ScammanderHelper.dropFirstArg[F]
+    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      ScammanderHelper.dropFirstArg
   }
 }

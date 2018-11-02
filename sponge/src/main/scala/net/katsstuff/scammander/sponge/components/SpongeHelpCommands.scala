@@ -1,7 +1,6 @@
 package net.katsstuff.scammander.sponge.components
 
-import scala.language.higherKinds
-
+import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters}
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.service.pagination.PaginationList
 import org.spongepowered.api.text.Text
@@ -9,10 +8,8 @@ import org.spongepowered.api.text.action.TextActions
 import org.spongepowered.api.text.format.TextColors._
 import org.spongepowered.api.text.format.TextStyles._
 
-import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters}
-
-trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
-  self: SpongeBase[F] with NormalParameters[F] with HelperParameters[F] =>
+trait SpongeHelpCommands extends HelpCommands {
+  self: SpongeBase with NormalParameters with HelperParameters =>
 
   override type Title = Text
 
@@ -21,10 +18,10 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
   private val End    = "└─"
 
   override def sendMultipleCommandHelp(
-      title: Text,
-      source: CommandSource,
+      title: Title,
+      source: RootSender,
       commands: Set[ChildCommand]
-  ): F[CommandSuccess] = {
+  ): G[CommandSuccess] = {
     val pages = PaginationList.builder()
     pages.title(title)
 
@@ -44,15 +41,15 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
     pages.contents(helpTexts: _*)
     pages.sendTo(source)
 
-    Command.successF()
+    Result.successF()
   }
 
   override def sendCommandHelp(
-      title: Text,
-      source: CommandSource,
+      title: Title,
+      source: RootSender,
       command: StaticChildCommand,
       path: List[String]
-  ): F[CommandSuccess] = {
+  ): G[CommandSuccess] = {
     if (command.testPermission(source)) {
       val commandName = path.mkString("/", " ", "")
       val pages       = PaginationList.builder()
@@ -60,8 +57,8 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
       pages.contents(createCommandHelp(source, commandName, commandName, command, detail = true): _*)
       pages.sendTo(source)
 
-      Command.successF()
-    } else Command.errorF("You don't have the permission to see the help for this command")
+      Result.successF()
+    } else Result.errorF[G, CommandSuccess]("You don't have the permission to see the help for this command")
   }
 
   def createCommandHelp(
@@ -83,9 +80,9 @@ trait SpongeHelpCommands[F[_]] extends HelpCommands[F] {
           .suggestCommand(fullCommandName)
       )
 
-    val commandHelp = runComputation(command.info.help(source))
+    val commandHelp = runG(command.info.help(source))
       .fold(_ => Some(Text.of("Error when getting help")), identity)
-    val commandDescription = runComputation(command.info.shortDescription(source))
+    val commandDescription = runG(command.info.shortDescription(source))
       .fold(_ => Some(Text.of("Error when getting description")), identity)
 
     commandDescription.foreach(desc => helpBuilder.onHover(TextActions.showText(desc)))

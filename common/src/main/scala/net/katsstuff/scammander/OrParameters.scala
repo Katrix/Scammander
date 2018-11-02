@@ -24,7 +24,7 @@ import scala.language.higherKinds
 
 import cats.syntax.all._
 
-trait OrParameters[F[_]] { self: ScammanderBase[F] =>
+trait OrParameters { self: ScammanderBase =>
 
   /**
     * A class which can parse a normal parameter, or can optionally be filled
@@ -49,14 +49,10 @@ trait OrParameters[F[_]] { self: ScammanderBase[F] =>
   ): Parameter[OrSource[Base]] = new ProxyParameter[OrSource[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse(source: RootSender, extra: RunExtra): Parser[OrSource[Base]] = {
-      val fa1: Parser[Base] = param.parse(source, extra)
-      val fa2: Parser[Base] = Command.liftFtoParser(validator.validate(source))
+    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[OrSource[Base]] =
+      ScammanderHelper.withFallback(param.parse(source, extra), validator.validate(source)).map(Or.apply)
 
-      ScammanderHelper.withFallbackParser(fa1, fa2).map(Or.apply)
-    }
-
-    override def usage(source: RootSender): F[String] =
+    override def usage[F[_]: ParserError](source: RootSender): F[String] =
       ScammanderHelper.withFallback(validator.validate(source).map(_ => s"[$name]"), super.usage(source))
   }
 }

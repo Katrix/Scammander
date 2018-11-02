@@ -2,16 +2,24 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
+import net.katsstuff.scammander.ScammanderTypes.{ParserError, ParserState}
+
 /**
   * The base class for a command. Extend from this if you want full control over a command.
   */
-trait ComplexCommand[F[_], RootSender, RunExtra, TabExtra, Result, StaticChildCommand] {
+trait ComplexCommand[G[_], RootSender, RunExtra, TabExtra, ResultTpe, StaticChildCommand] {
 
-  def runRaw(source: RootSender, extra: RunExtra, args: List[RawCmdArg]): F[CommandSuccess[Result]]
+  def runRaw[F[_]: ParserState: ParserError](
+      source: RootSender,
+      extra: RunExtra
+  ): F[G[CommandSuccess[ResultTpe]]]
 
-  def suggestions(source: RootSender, extra: TabExtra, args: List[RawCmdArg]): F[Seq[String]]
+  def suggestions[F[_]: ParserState: ParserError](
+      source: RootSender,
+      extra: TabExtra
+  ): F[Seq[String]]
 
-  def usage(source: RootSender): F[String]
+  def usage[F[_]: ParserError](source: RootSender): F[String]
 
   def children: Set[ComplexChildCommand[StaticChildCommand]] =
     Set.empty

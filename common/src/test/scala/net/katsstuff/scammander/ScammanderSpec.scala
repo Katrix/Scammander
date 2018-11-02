@@ -5,16 +5,12 @@ import org.scalatest.{Assertion, FunSuite, Matchers}
 import cats.MonadError
 import cats.data.NonEmptyList
 
-class ScammanderSpec
-    extends FunSuite
-    with Matchers
-    with ScammanderBaseAll[Either[NonEmptyList[CommandFailure], ?]] {
+class ScammanderSpec extends FunSuite with Matchers with ScammanderBaseAll[Either[NonEmptyList[CommandFailure], ?]] {
 
-
-  override type RootSender = Unit
-  override type RunExtra = Unit
-  override type TabExtra = Unit
-  override type Result                   = Unit
+  override type RootSender         = Unit
+  override type RunExtra           = Unit
+  override type TabExtra           = Unit
+  override type ResultTpe          = Unit
   override type StaticChildCommand = DummyStaticChildCommand
   case class DummyStaticChildCommand(command: ComplexCommand) extends BaseStaticChildCommand
 
