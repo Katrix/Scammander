@@ -2,9 +2,9 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.Functor
 import cats.syntax.all._
-import net.katsstuff.scammander.ScammanderTypes.ParserError
+import cats.{Monad, MonadError}
+import net.katsstuff.scammander.ScammanderTypes.{CommandFailureNEL, ParserError}
 
 /**
   * A typeclass which helps convert a user into another type.
@@ -21,13 +21,46 @@ object ComplexUserValidator {
       implicit validator: ComplexUserValidator[A, RootSender]
   ): ComplexUserValidator[A, RootSender] = validator
 
-  implicit def instanceForValidator[RootSender]: Functor[ComplexUserValidator[?, RootSender]] =
-    new Functor[ComplexUserValidator[?, RootSender]] {
-      //noinspection ConvertExpressionToSAM
-      override def map[A, B](fa: ComplexUserValidator[A, RootSender])(
+  implicit def instanceForValidator[RootSender]: MonadError[ComplexUserValidator[?, RootSender], CommandFailureNEL] = {
+    type UserValidator[A] = ComplexUserValidator[A, RootSender]
+
+    new MonadError[UserValidator, CommandFailureNEL] {
+      override def map[A, B](fa: UserValidator[A])(
           f: A => B
-      ): ComplexUserValidator[B, RootSender] = new ComplexUserValidator[B, RootSender] {
+      ): UserValidator[B] = new UserValidator[B] {
         override def validate[F[_]: ParserError](sender: RootSender): F[B] = fa.validate(sender).map(f)
       }
+
+      override def flatMap[A, B](fa: UserValidator[A])(
+          f: A => UserValidator[B]
+      ): UserValidator[B] = new UserValidator[B] {
+        override def validate[F[_]: ParserError](sender: RootSender): F[B] =
+          fa.validate(sender).flatMap(a => f(a).validate(sender))
+      }
+
+      override def tailRecM[A, B](a: A)(
+          f: A => UserValidator[Either[A, B]]
+      ): UserValidator[B] = new UserValidator[B] {
+        override def validate[F[_]: ParserError](sender: RootSender): F[B] =
+          Monad[F].tailRecM(a)(a => f(a).validate(sender))
+      }
+
+      override def raiseError[A](
+          e: CommandFailureNEL
+      ): UserValidator[A] = new UserValidator[A] {
+        override def validate[F[_]: ParserError](sender: RootSender): F[A] = e.raiseError
+      }
+
+      override def handleErrorWith[A](fa: UserValidator[A])(
+          f: CommandFailureNEL => UserValidator[A]
+      ): UserValidator[A] = new UserValidator[A] {
+        override def validate[F[_]: ParserError](sender: RootSender): F[A] =
+          fa.validate(sender).handleErrorWith(e => f(e).validate(sender))
+      }
+
+      override def pure[A](x: A): UserValidator[A] = new UserValidator[A] {
+        override def validate[F[_]: ParserError](sender: RootSender): F[A] = x.pure
+      }
     }
+  }
 }
