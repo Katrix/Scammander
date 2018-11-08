@@ -2,10 +2,9 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
-import cats.MonadError
 import cats.data.NonEmptyList
-import cats.mtl.MonadState
-import cats.syntax.all._
+import cats.mtl.syntax.all._
+import cats.mtl.{ApplicativeHandle, MonadState}
 import net.katsstuff.scammander
 
 trait ScammanderTypes {
@@ -20,7 +19,7 @@ trait ScammanderTypes {
   val RawCmdArg: scammander.RawCmdArg.type = scammander.RawCmdArg
 
   type ParserState[F[_]] = MonadState[F, List[RawCmdArg]]
-  type ParserError[F[_]] = MonadError[F, CommandFailureNEL]
+  type ParserError[F[_]] = ApplicativeHandle[F, CommandFailureNEL]
 
   object Result {
 
@@ -28,19 +27,19 @@ trait ScammanderTypes {
       * Creates a generic command error step.
       */
     def errorF[F[_]: ParserError, A](msg: String, shouldShowUsage: Boolean = false): F[A] =
-      errorNel(msg, shouldShowUsage).raiseError
+      errorNel(msg, shouldShowUsage).raise
 
     /**
       * Creates a syntax command error step.
       */
     def syntaxErrorF[F[_]: ParserError, A](msg: String, pos: Int): F[A] =
-      syntaxErrorNel(msg, pos).raiseError
+      syntaxErrorNel(msg, pos).raise
 
     /**
       * Creates a usage  command error step.
       */
     def usageErrorF[F[_]: ParserError, A](msg: String, pos: Int): F[A] =
-      usageErrorNel(msg, pos).raiseError
+      usageErrorNel(msg, pos).raise
 
     /**
       * Creates a generic command error NEL.

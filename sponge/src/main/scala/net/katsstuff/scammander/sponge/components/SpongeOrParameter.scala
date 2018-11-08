@@ -4,8 +4,9 @@ import scala.language.higherKinds
 
 import scala.collection.JavaConverters._
 
-import cats.Functor
+import cats.mtl.syntax.all._
 import cats.syntax.all._
+import cats.{Functor, Monad}
 import com.flowpowered.math.vector.{Vector3d, Vector3i}
 import net.katsstuff.scammander.{OrParameters, ScammanderHelper}
 import org.spongepowered.api.command.CommandSource
@@ -21,13 +22,13 @@ trait SpongeOrParameter {
     * A typeclass which returns what the sender is currently targeting.
     */
   trait Targeter[A] {
-    def getTarget[F[_]: ParserError](source: CommandSource, pos: Int): F[A]
+    def getTarget[F[_]: Monad: ParserError](source: CommandSource, pos: Int): F[A]
   }
   object Targeter {
 
     implicit val functor: Functor[Targeter] = new Functor[Targeter] {
       override def map[A, B](fa: Targeter[A])(f: A => B): Targeter[B] = new Targeter[B] {
-        override def getTarget[F[_]: ParserError](source: CommandSource, pos: Int): F[B] =
+        override def getTarget[F[_]: Monad: ParserError](source: CommandSource, pos: Int): F[B] =
           fa.getTarget[F](source, pos).map(f)
       }
     }
@@ -35,7 +36,7 @@ trait SpongeOrParameter {
     implicit def entityTargeter[A <: Entity](implicit typeable: Typeable[A]): Targeter[A] = new Targeter[A] {
       private val EntityCase = TypeCase[A]
 
-      override def getTarget[F[_]](source: CommandSource, pos: Int)(implicit E: ParserError[F]): F[A] = {
+      override def getTarget[F[_]: Monad](source: CommandSource, pos: Int)(implicit E: ParserError[F]): F[A] = {
 
         entitySender[Entity].validate[F](source).flatMap { entity =>
           val target = entity.getWorld
@@ -48,19 +49,19 @@ trait SpongeOrParameter {
               case EntityCase(e) => e
             }
 
-          E.fromOption(target, Result.usageErrorNel("Not looking at an entity", pos))
+          target.fold(Result.usageErrorF[F, A]("Not looking at an entity", pos))(_.pure)
         }
       }
     }
 
     implicit val blockHitTargeter: Targeter[BlockRayHit[World]] = {
       new Targeter[BlockRayHit[World]] {
-        override def getTarget[F[_]](source: CommandSource, pos: Int)(
+        override def getTarget[F[_]: Monad](source: CommandSource, pos: Int)(
             implicit E: ParserError[F]
         ): F[BlockRayHit[World]] =
           entitySender[Entity].validate[F](source).flatMap { entity =>
             val res = BlockRay.from(entity).distanceLimit(10).build().asScala.toStream.headOption
-            E.fromOption(res, Result.usageErrorNel("Not looking at an block", pos))
+            res.fold(Result.usageErrorF[F, BlockRayHit[World]]("Not looking at an block", pos))(_.pure)
           }
       }
     }
@@ -83,13 +84,13 @@ trait SpongeOrParameter {
   ): Parameter[OrTarget[Base]] = new ProxyParameter[OrTarget[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse[F[_]: ParserState: ParserError](source: CommandSource, extra: Unit): F[OrTarget[Base]] =
+    override def parse[F[_]: Monad: ParserState: ParserError](source: CommandSource, extra: Unit): F[OrTarget[Base]] =
       for {
         pos <- ScammanderHelper.getPos
         res <- ScammanderHelper.withFallback(parameter.parse(source, extra), targeter.getTarget[F](source, pos))
       } yield Or(res)
 
-    override def usage[F[_]: ParserError](source: CommandSource): F[String] =
-      targeter.getTarget[F](source, -1).map(_ => s"[$name]").handleErrorWith(_ => super.usage[F](source))
+    override def usage[F[_]: Monad: ParserError](source: CommandSource): F[String] =
+      targeter.getTarget[F](source, -1).map(_ => s"[$name]").handleWith[CommandFailureNEL](_ => super.usage[F](source))
   }
 }

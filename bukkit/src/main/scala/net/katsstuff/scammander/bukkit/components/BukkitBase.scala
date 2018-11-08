@@ -22,9 +22,9 @@ package net.katsstuff.scammander.bukkit.components
 
 import scala.collection.JavaConverters._
 
-import cats.Applicative
 import cats.arrow.FunctionK
-import cats.syntax.all._
+import cats.mtl.{ApplicativeHandle, DefaultApplicativeHandle}
+import cats.{Applicative, ApplicativeError, Functor}
 import net.katsstuff.scammander.ScammanderBase
 import org.bukkit.command.CommandSender
 import org.bukkit.plugin.java.JavaPlugin
@@ -37,7 +37,13 @@ trait BukkitBase extends ScammanderBase {
   override type ResultTpe          = Boolean
   override type StaticChildCommand = ChildCommandExtra[G]
 
-  implicit protected def G: Applicative[G]
+  protected def G: ApplicativeError[G, CommandFailureNEL]
+  def GE: ApplicativeHandle[G, CommandFailureNEL] = new DefaultApplicativeHandle[G, CommandFailureNEL] {
+    override val functor: Functor[G]                                         = G
+    override val applicative: Applicative[G]                                 = G
+    override def handleWith[A](fa: G[A])(f: CommandFailureNEL => G[A]): G[A] = G.handleErrorWith(fa)(f)
+    override def raise[A](e: CommandFailureNEL): G[A]                        = G.raiseError(e)
+  }
 
   override protected val defaultCommandSuccess: Boolean = true
 
@@ -64,7 +70,7 @@ trait BukkitBase extends ScammanderBase {
     * Helper for creating a help when registering a command.
     */
   object Help {
-    def liftF(f: CommandSender => G[String]): CommandSender => G[Option[String]] = f.andThen(_.map(Some.apply))
+    def liftF(f: CommandSender => G[String]): CommandSender => G[Option[String]] = f.andThen(G.map(_)(Some.apply))
     def apply(f: CommandSender => String): CommandSender => G[Option[String]]    = f.andThen(text => G.pure(Some(text)))
     def apply(text: String): CommandSender => G[Option[String]]                  = _ => G.pure(Some(text))
     val none: CommandSender => G[Option[String]]                                 = _ => G.pure(None)
@@ -74,7 +80,7 @@ trait BukkitBase extends ScammanderBase {
     * Helper for creating an description when registering a command.
     */
   object Description {
-    def liftF(f: CommandSender => G[String]): CommandSender => G[Option[String]] = f.andThen(_.map(Some.apply))
+    def liftF(f: CommandSender => G[String]): CommandSender => G[Option[String]] = f.andThen(G.map(_)(Some.apply))
     def apply(f: CommandSender => String): CommandSender => G[Option[String]]    = f.andThen(text => G.pure(Some(text)))
     def apply(text: String): CommandSender => G[Option[String]]                  = _ => G.pure(Some(text))
     val none: CommandSender => G[Option[String]]                                 = _ => G.pure(None)

@@ -22,6 +22,7 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
+import cats.Monad
 import cats.syntax.all._
 
 trait OrParameters { self: ScammanderBase =>
@@ -49,10 +50,10 @@ trait OrParameters { self: ScammanderBase =>
   ): Parameter[OrSource[Base]] = new ProxyParameter[OrSource[Base], Base] {
     override def param: Parameter[Base] = parameter
 
-    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[OrSource[Base]] =
+    override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[OrSource[Base]] =
       ScammanderHelper.withFallback(param.parse(source, extra), validator.validate(source)).map(Or.apply)
 
-    override def usage[F[_]: ParserError](source: RootSender): F[String] =
+    override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] =
       ScammanderHelper.withFallback(validator.validate(source).map(_ => s"[$name]"), super.usage(source))
   }
 }

@@ -21,6 +21,10 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderBaseAll {
   override type G[A] = Either[CommandFailureNEL, A]
 
   type Parser[A] = StateT[G, List[RawCmdArg], A]
+  implicit val E: ScammanderTypes.ParserError[Parser] = raiseInd(
+    stateMonadLayerControl,
+    handleEither
+  )
 
   case class MyObj(name: String, i: Int)
 
@@ -59,7 +63,7 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderBaseAll {
   }
 
   def usage[A](implicit param: Parameter[A]): String = {
-    val e = param.usage(())
+    val e = param.usage[G](())
     assert(e.isRight)
     e.right.get
   }

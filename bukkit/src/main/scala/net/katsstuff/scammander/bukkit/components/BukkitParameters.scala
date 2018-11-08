@@ -4,8 +4,8 @@ import scala.language.higherKinds
 
 import scala.collection.JavaConverters._
 
-import cats.Eval
 import cats.syntax.all._
+import cats.{Eval, Monad}
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderHelper}
 import org.bukkit.command.{BlockCommandSender, CommandSender}
 import org.bukkit.entity.{Entity, Player}
@@ -38,14 +38,14 @@ trait BukkitParameters {
     def permError[F[_]: ParserError, B](pos: Int): F[B] =
       Result.usageErrorF[F, B]("You do not have the permissions needed to use this parameter", pos)
 
-    override def parse[F[_]: ParserState: ParserError](
+    override def parse[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[NeedPermission[Perm, A]] =
       if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
       else ScammanderHelper.getPos.flatMap(permError[F, NeedPermission[Perm, A]])
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] =
@@ -58,7 +58,10 @@ trait BukkitParameters {
 
     override val name: String = "player"
 
-    override def parse[F[_]: ParserState: ParserError](source: CommandSender, extra: BukkitExtra): F[Set[Player]] = {
+    override def parse[F[_]: Monad: ParserState: ParserError](
+        source: CommandSender,
+        extra: BukkitExtra
+    ): F[Set[Player]] = {
       val normalNames = ScammanderHelper.parseMany[F, Player](name, Bukkit.getOnlinePlayers.asScala)
       val uuidPlayers = uuidParam
         .parse(source, extra)
@@ -72,7 +75,7 @@ trait BukkitParameters {
       ScammanderHelper.withFallback(normalNames, uuidPlayers)
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] =
@@ -89,7 +92,7 @@ trait BukkitParameters {
   implicit val offlinePlayerParam: Parameter[Set[OfflinePlayer]] = new Parameter[Set[OfflinePlayer]] {
     override def name: String = "offlinePlayer"
 
-    override def parse[F[_]: ParserState: ParserError](
+    override def parse[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Set[OfflinePlayer]] = {
@@ -107,7 +110,7 @@ trait BukkitParameters {
       ScammanderHelper.withFallback(ScammanderHelper.withFallback(players, users), uuidUsers)
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] = {
@@ -125,7 +128,7 @@ trait BukkitParameters {
   implicit val vector3dParam: Parameter[BukkitVector] = new Parameter[BukkitVector] {
     override def name: String = "vector3d"
 
-    override def parse[F[_]: ParserState: ParserError](
+    override def parse[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[BukkitVector] = {
@@ -142,7 +145,7 @@ trait BukkitParameters {
       } yield new BukkitVector(x, y, z)
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] =
@@ -151,13 +154,14 @@ trait BukkitParameters {
     private def hasNoPosError(pos: Int): CommandFailureNEL =
       Result.usageErrorNel("Relative position specified but source does not have a position", pos)
 
-    private def parseRelative[F[_]](
+    private def parseRelative[F[_]: Monad](
         source: CommandSender,
         extra: BukkitExtra,
         relativeToOpt: Option[Double],
         arg: RawCmdArg
     )(implicit S: ParserState[F], E: ParserError[F]): F[Double] =
-      E.fromOption(relativeToOpt, hasNoPosError(arg.start))
+      relativeToOpt
+        .fold(E.raise[Double](hasNoPosError(arg.start)))(_.pure)
         .flatMap { relativeTo =>
           val newArg = arg.content.substring(1)
           if (newArg.isEmpty) relativeTo.pure[F]
@@ -168,7 +172,7 @@ trait BukkitParameters {
               S.modify(xs => xs.headOption.fold(xs)(_.copy(content = newArg) :: xs.tail))
         }
 
-    private def parseRelativeOrNormal[F[_]: ParserState: ParserError](
+    private def parseRelativeOrNormal[F[_]: Monad: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra,
         relativeToOpt: Option[Double]

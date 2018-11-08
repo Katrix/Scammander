@@ -9,10 +9,9 @@ import java.util.concurrent.Callable
 
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
-import scala.util.{Failure, Success, Try}
 
-import cats.Eval
 import cats.syntax.all._
+import cats.{Eval, Monad}
 import com.flowpowered.math.vector.Vector3d
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderHelper}
 import ninja.leaping.configurate.hocon.HoconConfigurationLoader
@@ -37,11 +36,6 @@ trait SpongeParameter {
   implicit def catalogTypeHasName[A <: CatalogType]: HasName[A] = HasName.instance((a: A) => a.getId)
   implicit val pluginHasName: HasName[PluginContainer]          = HasName.instance((a: PluginContainer) => a.getId)
 
-  private def tryToEither[B](tried: Try[B]): Either[Throwable, B] = tried match {
-    case Success(b) => Right(b)
-    case Failure(e) => Left(e)
-  }
-
   /**
     * A class to use for parameter that should require a specific permission.
     */
@@ -59,14 +53,14 @@ trait SpongeParameter {
       def permError[F[_]: ParserError, B](pos: Int): F[B] =
         Result.usageErrorF[F, B]("You do not have the permissions needed to use this parameter", pos)
 
-      override def parse[F[_]: ParserState: ParserError](
+      override def parse[F[_]: Monad: ParserState: ParserError](
           source: CommandSource,
           extra: Unit
       ): F[NeedPermission[S, A]] =
         if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
         else ScammanderHelper.getPos.flatMap(permError[F, NeedPermission[S, A]])
 
-      override def suggestions[F[_]: ParserState: ParserError](
+      override def suggestions[F[_]: Monad: ParserState: ParserError](
           source: CommandSource,
           extra: Option[Location[World]]
       ): F[Seq[String]] =
@@ -78,7 +72,10 @@ trait SpongeParameter {
 
     override val name: String = "player"
 
-    private def parseSelector[F[_]: ParserState: ParserError](source: CommandSource, arg: RawCmdArg): F[Set[Player]] = {
+    private def parseSelector[F[_]: Monad: ParserState: ParserError](
+        source: CommandSource,
+        arg: RawCmdArg
+    ): F[Set[Player]] = {
       try {
         Selector
           .parse(arg.content)
@@ -92,7 +89,7 @@ trait SpongeParameter {
       }
     }
 
-    override def parse[F[_]: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[Player]] =
+    override def parse[F[_]: Monad: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[Player]] =
       for {
         arg <- ScammanderHelper.firstArg
         res <- {
@@ -102,7 +99,7 @@ trait SpongeParameter {
         _ <- ScammanderHelper.dropFirstArg[F]
       } yield res
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.firstArgOpt.flatMap {
@@ -125,7 +122,7 @@ trait SpongeParameter {
 
     private val EntityType: TypeCase[A] = TypeCase[A]
 
-    override def parse[F[_]: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[A]] =
+    override def parse[F[_]: Monad: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[A]] =
       ScammanderHelper.firstArg.flatMap { arg =>
         try {
           val entities = Selector.parse(arg.content).resolve(source).asScala.collect {
@@ -137,7 +134,7 @@ trait SpongeParameter {
         }
       }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] =
@@ -153,10 +150,10 @@ trait SpongeParameter {
 
     override val name: String = "user"
 
-    private def parsePlayers[F[_]: ParserState: ParserError](source: CommandSource): F[Set[User]] =
+    private def parsePlayers[F[_]: Monad: ParserState: ParserError](source: CommandSource): F[Set[User]] =
       allPlayerParam.parse(source, ()).map(_.map(player => player: User))
 
-    private def parseUsers[F[_]: ParserState: ParserError]: F[Set[User]] = {
+    private def parseUsers[F[_]: Monad: ParserState: ParserError]: F[Set[User]] = {
       val users = userStorage.getAll.asScala
         .collect {
           case profile if profile.getName.isPresent =>
@@ -170,10 +167,10 @@ trait SpongeParameter {
       ScammanderHelper.parseMany[F, User](name, users)
     }
 
-    override def parse[F[_]: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[User]] =
+    override def parse[F[_]: Monad: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[User]] =
       ScammanderHelper.withFallback(parsePlayers(source), parseUsers)
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] =
@@ -189,7 +186,7 @@ trait SpongeParameter {
 
   implicit val vector3dParam: Parameter[Vector3d] = new Parameter[Vector3d] {
     override def name: String = "vector3"
-    override def parse[F[_]: ParserState: ParserError](source: CommandSource, extra: Unit): F[Vector3d] = {
+    override def parse[F[_]: Monad: ParserState: ParserError](source: CommandSource, extra: Unit): F[Vector3d] = {
       val relative = source match {
         case locatable: Locatable => Some(locatable.getLocation)
         case _                    => None
@@ -202,7 +199,7 @@ trait SpongeParameter {
       } yield Vector3d.from(x, t, z)
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] =
@@ -211,12 +208,13 @@ trait SpongeParameter {
     private def hasNoPosError(pos: Int): CommandFailureNEL =
       Result.usageErrorNel("Relative position specified but source does not have a position", pos)
 
-    private def parseRelative[F[_]](
+    private def parseRelative[F[_]: Monad](
         source: CommandSource,
         relativeToOpt: Option[Double],
         arg: RawCmdArg
-    )(implicit S: ParserState[F], E: ParserError[F]): F[Double] =
-      E.fromEither(relativeToOpt.toRight(hasNoPosError(arg.start)))
+    )(implicit S: ParserState[F], E: ParserError[F]): F[Double] = {
+      relativeToOpt
+        .fold(E.raise[Double](hasNoPosError(arg.start)))(_.pure)
         .flatMap { relativeTo =>
           val newArg = arg.content.substring(1)
           if (newArg.isEmpty) relativeTo.pure[F]
@@ -226,8 +224,9 @@ trait SpongeParameter {
                 .parse(source, ())
                 .map(_ + relativeTo)
         }
+    }
 
-    private def parseRelativeOrNormal[F[_]: ParserState: ParserError](
+    private def parseRelativeOrNormal[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         relativeToOpt: Option[Double]
     ): F[Double] =
@@ -245,7 +244,7 @@ trait SpongeParameter {
 
     override val name: String = "location"
 
-    override def parse[F[_]: ParserState: ParserError](
+    override def parse[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Unit
     ): F[Set[Location[World]]] = ScammanderHelper.firstArgOpt.flatMap { cmdArg =>
@@ -276,7 +275,7 @@ trait SpongeParameter {
         }
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.firstArgOpt.flatMap { cmdArg =>
@@ -315,21 +314,21 @@ trait SpongeParameter {
 
     override val name: String = "ip"
 
-    override def parse[F[_]](
+    override def parse[F[_]: Monad](
         source: CommandSource,
         extra: Unit
     )(implicit S: ParserState[F], E: ParserError[F]): F[InetAddress] = {
       val fromIp = ScammanderHelper.firstArgAndDrop.flatMap { arg =>
-        E.fromEither(tryToEither(Try {
-          InetAddress.getByName(arg.content)
-        }).left.map(e => Result.usageErrorNel(e.getMessage, arg.start)))
+        E.catchNonFatal(InetAddress.getByName(arg.content)) { e =>
+          Result.usageErrorNel(e.getMessage, arg.start)
+        }
       }
       val fromPlayer = playerParam.parse(source, extra).map(_.getConnection.getAddress.getAddress)
 
       ScammanderHelper.withFallback(fromIp, fromPlayer)
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.dropFirstArg[F]
@@ -337,7 +336,7 @@ trait SpongeParameter {
 
   implicit val dataContainerParam: Parameter[DataContainer] = new Parameter[DataContainer] {
     override def name: String = "dataContainer"
-    override def parse[F[_]](
+    override def parse[F[_]: Monad](
         source: CommandSource,
         extra: Unit
     )(implicit S: ParserState[F], E: ParserError[F]): F[DataContainer] = {
@@ -352,16 +351,14 @@ trait SpongeParameter {
           }
           val loader = HoconConfigurationLoader.builder.setSource(reader).build
 
-          E.fromEither(
-            tryToEither(Try(DataTranslators.CONFIGURATION_NODE.translate(loader.load()))).left.map { e =>
-              Result.syntaxErrorNel(e.getMessage, pos)
-            }
-          )
+          E.catchNonFatal(DataTranslators.CONFIGURATION_NODE.translate(loader.load())) { e =>
+            Result.syntaxErrorNel(e.getMessage, pos)
+          }
         }
       } yield res
     }
 
-    override def suggestions[F[_]: ParserState: ParserError](
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.dropFirstArg[F]

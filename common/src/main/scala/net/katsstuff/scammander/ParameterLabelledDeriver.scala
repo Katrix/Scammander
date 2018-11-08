@@ -22,6 +22,7 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
+import cats.Monad
 import cats.syntax.all._
 import shapeless._
 import shapeless.labelled.FieldType
@@ -55,7 +56,7 @@ trait ParameterLabelledDeriver extends ParameterDeriver { self: ScammanderBase =
     new Parameter[FieldType[HK, HV] :: T] {
       override def name: String = s"${hName.value.name} ${tParam.value.name}"
 
-      override def parse[F[_]: ParserState: ParserError](
+      override def parse[F[_]: Monad: ParserState: ParserError](
           source: RootSender,
           extra: RunExtra
       ): F[FieldType[HK, HV] :: T] =
@@ -64,13 +65,16 @@ trait ParameterLabelledDeriver extends ParameterDeriver { self: ScammanderBase =
           t <- tParam.value.parse(source, extra)
         } yield labelled.field[HK](h) :: t
 
-      override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+      override def suggestions[F[_]: Monad: ParserState: ParserError](
+          source: RootSender,
+          extra: TabExtra
+      ): F[Seq[String]] =
         ScammanderHelper.withFallbackSuggestions(
           hParam.value.suggestions(source, extra),
           tParam.value.suggestions(source, extra)
         )
 
-      override def usage[F[_]: ParserError](source: RootSender): F[String] = {
+      override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] = {
         val hUsage = hName.value.name
         val tUsage = tParam.value.usage(source)
         tUsage.map(t => if (t.isEmpty) s"<$hUsage>" else s"<$hUsage> $t")
@@ -86,7 +90,7 @@ trait ParameterLabelledDeriver extends ParameterDeriver { self: ScammanderBase =
     new Parameter[FieldType[HK, HV] :+: T] {
       override def name: String = s"${hName.value.name}|${tParam.value.name}"
 
-      override def parse[F[_]: ParserState: ParserError](
+      override def parse[F[_]: Monad: ParserState: ParserError](
           source: RootSender,
           extra: RunExtra
       ): F[FieldType[HK, HV] :+: T] = {
@@ -97,14 +101,17 @@ trait ParameterLabelledDeriver extends ParameterDeriver { self: ScammanderBase =
         ScammanderHelper.withFallback(hParse, tParse)
       }
 
-      override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] = {
+      override def suggestions[F[_]: Monad: ParserState: ParserError](
+          source: RootSender,
+          extra: TabExtra
+      ): F[Seq[String]] = {
         val sfh = hParam.value.suggestions(source, extra)
         val sft = tParam.value.suggestions(source, extra)
 
         sfh.map2(sft)(_ ++ _)
       }
 
-      override def usage[F[_]: ParserError](source: RootSender): F[String] = {
+      override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] = {
         val hUsage = hParam.value.usage(source)
         val tUsage = tParam.value.usage(source)
 

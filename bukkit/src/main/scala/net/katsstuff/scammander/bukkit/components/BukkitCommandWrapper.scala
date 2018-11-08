@@ -12,7 +12,7 @@ import cats.arrow.FunctionK
 import cats.data.{NonEmptyList, StateT}
 import cats.instances.either._
 import cats.mtl.instances.all._
-import net.katsstuff.scammander.ScammanderTypes.CommandFailureNEL
+import net.katsstuff.scammander.ScammanderTypes.{CommandFailureNEL, ParserError}
 import net.katsstuff.scammander._
 import org.bukkit.ChatColor
 import org.bukkit.command.{CommandSender, TabExecutor, Command => BukkitCommand}
@@ -23,7 +23,14 @@ case class BukkitCommandWrapper[G[_]](
     runG: FunctionK[G, Either[CommandFailureNEL, ?]]
 ) extends TabExecutor {
 
-  type Parser[A] = StateT[Either[CommandFailureNEL, ?], List[RawCmdArg], A]
+  type Result[A] = Either[CommandFailureNEL, A]
+  type Parser[A] = StateT[Result, List[RawCmdArg], A]
+
+  //At least in the tests, this recurse for ever if we don't construct it manually
+  implicit private val E: ParserError[Parser] = raiseInd(
+    stateMonadLayerControl,
+    handleEither
+  )
 
   override def onCommand(
       source: CommandSender,
@@ -48,26 +55,27 @@ case class BukkitCommandWrapper[G[_]](
         res match {
           case Right(CommandSuccess(result)) => result
           case Left(NonEmptyList(CommandError(msg, true), Nil)) =>
-            source.sendMessage(s"${ChatColor.RED}$msg${command.usage(source).fold(_ => "", "\n" + _)}")
+            source.sendMessage(s"${ChatColor.RED}$msg${command.usage[Result](source).fold(_ => "", "\n" + _)}")
             true
           case Left(NonEmptyList(CommandError(msg, false), Nil)) =>
             source.sendMessage(ChatColor.RED + msg)
             true
           case Left(NonEmptyList(CommandSyntaxError(msg, _), Nil)) =>
             //TODO: Show error location
-            val toSend = s"${ChatColor.RED}$msg\nUsage: ${command.usage(source).getOrElse("<error>")}"
+            val toSend = s"${ChatColor.RED}$msg\nUsage: ${command.usage[Result](source).getOrElse("<error>")}"
 
             source.sendMessage(toSend)
             true
           case Left(NonEmptyList(CommandUsageError(msg, _), Nil)) =>
             //TODO: Show error location
-            val toSend = s"${ChatColor.RED}$msg\nUsage: ${command.usage(source).getOrElse("<error>")}"
+            val toSend = s"${ChatColor.RED}$msg\nUsage: ${command.usage[Result](source).getOrElse("<error>")}"
 
             source.sendMessage(toSend)
             true
           case Left(nel) =>
             val usage =
-              if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage(source).getOrElse("<error>")}" else ""
+              if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage[Result](source).getOrElse("<error>")}"
+              else ""
             source.sendMessage(s"${ChatColor.RED}${nel.map(_.msg).toList.mkString("\n")}$usage") //TODO: Better error here
             true
         }
@@ -108,7 +116,7 @@ case class BukkitCommandWrapper[G[_]](
           if (isParsed) Right(true) else Left(NonEmptyList.one(CommandError("Not child")))
         }
         val childSuggestions =
-          ScammanderHelper.suggestions(parse, Eval.now(command.childrenMap.keys)).runA(parsedArgs)
+          ScammanderHelper.suggestions[Parser, Boolean](parse, Eval.now(command.childrenMap.keys)).runA(parsedArgs)
         val paramSuggestions = command.suggestions[Parser](sender, extra).runA(parsedArgs)
         val ret = childSuggestions match {
           case Right(suggestions) => paramSuggestions.map(suggestions ++ _)

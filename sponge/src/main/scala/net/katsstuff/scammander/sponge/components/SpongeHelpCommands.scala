@@ -1,5 +1,7 @@
 package net.katsstuff.scammander.sponge.components
 
+import cats.MonadError
+import cats.mtl.ApplicativeHandle
 import net.katsstuff.scammander.{HelpCommands, HelperParameters, NormalParameters}
 import org.spongepowered.api.command.CommandSource
 import org.spongepowered.api.service.pagination.PaginationList
@@ -22,7 +24,8 @@ trait SpongeHelpCommands extends HelpCommands {
       source: RootSender,
       commands: Set[ChildCommand]
   ): G[CommandSuccess] = {
-    val pages = PaginationList.builder()
+    implicit val G: MonadError[G, CommandFailureNEL] = self.G
+    val pages                                        = PaginationList.builder()
     pages.title(title)
 
     val helpTexts = commands.toSeq
@@ -50,6 +53,8 @@ trait SpongeHelpCommands extends HelpCommands {
       command: StaticChildCommand,
       path: List[String]
   ): G[CommandSuccess] = {
+    implicit val G: MonadError[G, CommandFailureNEL]         = self.G
+    implicit val GE: ApplicativeHandle[G, CommandFailureNEL] = self.GE
     if (command.testPermission(source)) {
       val commandName = path.mkString("/", " ", "")
       val pages       = PaginationList.builder()

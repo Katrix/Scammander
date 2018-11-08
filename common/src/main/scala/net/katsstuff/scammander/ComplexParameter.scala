@@ -4,8 +4,8 @@ import scala.language.higherKinds
 
 import scala.annotation.implicitNotFound
 
-import cats.Functor
 import cats.syntax.all._
+import cats.{Functor, Monad}
 import net.katsstuff.scammander.ScammanderTypes._
 
 /**
@@ -26,7 +26,7 @@ trait ComplexParameter[A, RootSender, RunExtra, TabExtra] {
     * @param extra Extra platform specific info about the command.
     * @return A command step with the remaining arguments, and the parsed type.
     */
-  def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[A]
+  def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[A]
 
   /**
     * Returns the suggestions for a parameter.
@@ -34,12 +34,12 @@ trait ComplexParameter[A, RootSender, RunExtra, TabExtra] {
     * @param extra Extra platform specific info about the command.
     * @return A list of the remaining arguments, and the suggestions.
     */
-  def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]]
+  def suggestions[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]]
 
   /**
     * The usage for this command.
     */
-  def usage[F[_]: ParserError](source: RootSender): F[String]
+  def usage[F[_]: Monad: ParserError](source: RootSender): F[String]
 }
 object ComplexParameter {
   def apply[A, RootSender, RunExtra, TabExtra](
@@ -57,16 +57,16 @@ object ComplexParameter {
 
           override def name: String = fa.name
 
-          override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[B] =
+          override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[B] =
             fa.parse(source, extra).map(f)
 
-          override def suggestions[F[_]: ParserState: ParserError](
+          override def suggestions[F[_]: Monad: ParserState: ParserError](
               source: RootSender,
               extra: TabExtra
           ): F[Seq[String]] =
             fa.suggestions(source, extra)
 
-          override def usage[F[_]: ParserError](source: RootSender): F[String] = fa.usage(source)
+          override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] = fa.usage(source)
         }
     }
 }

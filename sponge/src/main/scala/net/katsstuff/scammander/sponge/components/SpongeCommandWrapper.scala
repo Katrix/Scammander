@@ -14,7 +14,7 @@ import cats.data.{NonEmptyList, StateT}
 import cats.instances.either._
 import cats.mtl.instances.all._
 import cats.syntax.all._
-import net.katsstuff.scammander.ScammanderTypes.CommandFailureNEL
+import net.katsstuff.scammander.ScammanderTypes.{CommandFailureNEL, ParserError}
 import net.katsstuff.scammander._
 import org.spongepowered.api.Sponge
 import org.spongepowered.api.command._
@@ -29,7 +29,14 @@ case class SpongeCommandWrapper[G[_]](
 ) extends CommandCallable
     with ComplexStaticChildCommand[G, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[G]] {
 
-  type Parser[A] = StateT[Either[CommandFailureNEL, ?], List[RawCmdArg], A]
+  type Result[A] = Either[CommandFailureNEL, A]
+  type Parser[A] = StateT[Result, List[RawCmdArg], A]
+
+  //At least in the tests, this recurse for ever if we don't construct it manually
+  implicit private val E: ParserError[Parser] = raiseInd(
+    stateMonadLayerControl,
+    handleEither
+  )
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
@@ -62,7 +69,7 @@ case class SpongeCommandWrapper[G[_]](
           throw e
         case Left(nel) =>
           val usage =
-            if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage(source).getOrElse("<error>")}" else ""
+            if (nel.exists(_.shouldShowUsage)) s"\nUsage: ${command.usage[Result](source).getOrElse("<error>")}" else ""
           val msg = s"${nel.map(_.msg).toList.mkString("\n")}$usage" //TODO: Better error here
           throw new CommandException(Text.of(msg))
       }
@@ -93,7 +100,7 @@ case class SpongeCommandWrapper[G[_]](
         if (isParsed) true.pure else NonEmptyList.one(CommandError("Not child")).raiseError
       }
       val childSuggestions =
-        ScammanderHelper.suggestions(parse, Eval.now(command.childrenMap.keys)).runA(args)
+        ScammanderHelper.suggestions[Parser, Boolean](parse, Eval.now(command.childrenMap.keys)).runA(args)
       val paramSuggestions = command.suggestions[Parser](source, Option(targetPosition)).runA(args)
       val ret = childSuggestions match {
         case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
@@ -113,13 +120,16 @@ case class SpongeCommandWrapper[G[_]](
       case Right(None)              => Optional.empty()
     }
 
-  override def getHelp(source: CommandSource): Optional[Text] = runG(info.help(source)) match {
-    case Left(nel)         => Optional.of(Text.of(nel.map(_.msg).toList.mkString("\n")))
-    case Right(Some(help)) => Optional.of(help)
-    case Right(None)       => Optional.empty()
+  override def getHelp(source: CommandSource): Optional[Text] = {
+    runG(info.help(source)) match {
+      case Left(nel)         => Optional.of(Text.of(nel.map(_.msg).toList.mkString("\n")))
+      case Right(Some(help)) => Optional.of(help)
+      case Right(None)       => Optional.empty()
+    }
   }
 
-  override def getUsage(source: CommandSource): Text = Text.of(command.usage(source).getOrElse("<error>"))
+  override def getUsage(source: CommandSource): Text =
+    Text.of(command.usage[Result](source).getOrElse("<error>"))
 
   def register(plugin: AnyRef, aliases: Seq[String]): Option[CommandMapping] = {
     val res = Sponge.getCommandManager.register(plugin, this, aliases.asJava)

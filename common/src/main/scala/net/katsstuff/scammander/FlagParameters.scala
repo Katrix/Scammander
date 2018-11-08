@@ -24,6 +24,7 @@ import scala.language.higherKinds
 
 import java.util.Locale
 
+import cats.Monad
 import cats.data.NonEmptyList
 import cats.syntax.all._
 import shapeless.Witness
@@ -44,7 +45,7 @@ trait FlagParameters { self: ScammanderBase =>
     private val flagName      = if (witness.value.size > 1) s"--${witness.value}" else s"-${witness.value}"
     override def name: String = s"$flagName ${flagParam.name}"
 
-    override def parse[F[_]](
+    override def parse[F[_]: Monad](
         source: RootSender,
         extra: RunExtra
     )(implicit S: ParserState[F], E: ParserError[F]): F[ValueFlag[Name, A]] =
@@ -59,11 +60,11 @@ trait FlagParameters { self: ScammanderBase =>
             S.modify(_.drop(singleIdx + 1)) *>
               flagParam.parse(source, extra).map(a => ValueFlag[Name, A](Some(a))) <*
               S.modify(ys => before ::: ys)
-          case more => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx)))
+          case more => E.raise(more.map(idx => Result.usageError(s"$flagName is already defined", idx)))
         }
       }
 
-    override def suggestions[F[_]](
+    override def suggestions[F[_]: Monad](
         source: RootSender,
         extra: TabExtra
     )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
@@ -81,11 +82,11 @@ trait FlagParameters { self: ScammanderBase =>
             S.modify(_.drop(singleIdx + 1)) *>
               flagParam.suggestions(source, extra) <*
               S.modify(ys => before ::: ys)
-          case more => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx._2)))
+          case more => E.raise(more.map(idx => Result.usageError(s"$flagName is already defined", idx._2)))
         }
       }
 
-    override def usage[F[_]: ParserError](source: RootSender): F[String] =
+    override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] =
       flagParam.usage(source).map(fUsage => s"$flagName $fUsage")
   }
 
@@ -103,7 +104,7 @@ trait FlagParameters { self: ScammanderBase =>
 
       override val name: String = flagName
 
-      override def parse[F[_]](
+      override def parse[F[_]: Monad](
           source: RootSender,
           extra: RunExtra
       )(implicit S: ParserState[F], E: ParserError[F]): F[BooleanFlag[Name]] =
@@ -114,11 +115,11 @@ trait FlagParameters { self: ScammanderBase =>
 
           NonEmptyList.fromList(matchingIndices).fold(BooleanFlag[Name](present = false).pure) {
             case NonEmptyList(singleIdx, Nil) => S.set(xs.patch(singleIdx, Nil, 1)).as(BooleanFlag(true))
-            case more                         => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx)))
+            case more                         => E.raise(more.map(idx => Result.usageError(s"$flagName is already defined", idx)))
           }
         }
 
-      override def suggestions[F[_]](
+      override def suggestions[F[_]: Monad](
           source: RootSender,
           extra: TabExtra
       )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
@@ -132,11 +133,11 @@ trait FlagParameters { self: ScammanderBase =>
           NonEmptyList.fromList(matchingIndices).fold((Nil: Seq[String]).pure) {
             case NonEmptyList((false, _), Nil)        => Seq(flagName).pure
             case NonEmptyList((true, singleIdx), Nil) => S.set(xs.patch(singleIdx, Nil, 1)).as(Nil)
-            case more                                 => E.raiseError(more.map(idx => Result.usageError(s"$flagName is already defined", idx._2)))
+            case more                                 => E.raise(more.map(idx => Result.usageError(s"$flagName is already defined", idx._2)))
           }
         }
 
-      override def usage[F[_]: ParserError](source: RootSender): F[String] = flagName.pure
+      override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] = flagName.pure
     }
 
   /**
@@ -154,13 +155,16 @@ trait FlagParameters { self: ScammanderBase =>
 
     override val name: String = s"${paramParam.name} ${flagsParam.name}"
 
-    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Flags[A, B]] =
+    override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Flags[A, B]] =
       for {
         t1 <- flagsParam.parse(source, extra)
         t2 <- paramParam.parse(source, extra)
       } yield Flags(t1, t2)
 
-    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
+        source: RootSender,
+        extra: TabExtra
+    ): F[Seq[String]] =
       for {
         flagSuggestions  <- flagsParam.suggestions(source, extra)
         paramSuggestions <- paramParam.suggestions(source, extra)

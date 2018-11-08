@@ -4,6 +4,7 @@ import scala.language.higherKinds
 
 import java.time.LocalDateTime
 
+import cats.Monad
 import cats.syntax.all._
 
 trait OrNowParameter {
@@ -18,14 +19,20 @@ trait OrNowParameter {
 
     override val name: String = dateTimeParam.name
 
-    override def parse[F[_]: ParserState: ParserError](source: RootSender, extra: RunExtra): F[LocalDateTime Or Now] =
+    override def parse[F[_]: Monad: ParserState: ParserError](
+        source: RootSender,
+        extra: RunExtra
+    ): F[LocalDateTime Or Now] =
       ScammanderHelper
         .withFallback(dateTimeParam.parse(source, extra), LocalDateTime.now().pure)
         .map(Or.apply)
 
-    override def suggestions[F[_]: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]] =
+    override def suggestions[F[_]: Monad: ParserState: ParserError](
+        source: RootSender,
+        extra: TabExtra
+    ): F[Seq[String]] =
       dateTimeParam.suggestions(source, extra)
 
-    override def usage[F[_]: ParserError](source: RootSender): F[String] = s"[$name]".pure
+    override def usage[F[_]: Monad: ParserError](source: RootSender): F[String] = s"[$name]".pure
   }
 }

@@ -25,9 +25,9 @@ import scala.language.higherKinds
 import java.util.Locale
 import java.util.regex.Pattern
 
-import cats.Eval
 import cats.data.NonEmptyList
 import cats.syntax.all._
+import cats.{Eval, Monad}
 import net.katsstuff.scammander.ScammanderTypes._
 
 object ScammanderHelper {
@@ -45,7 +45,7 @@ object ScammanderHelper {
   val notEnoughArgsNel: NonEmptyList[CommandFailure] = NonEmptyList.one(notEnoughArgs)
 
   def notEnoughArgsErrorF[F[_], A](implicit E: ParserError[F]): F[A] =
-    E.raiseError(notEnoughArgsNel)
+    E.raise(notEnoughArgsNel)
 
   /**
     * Parse a string argument into [[RawCmdArg]]s which are delimited by whitespace.
@@ -74,7 +74,7 @@ object ScammanderHelper {
     }
   }
 
-  def dropFirstArg[F[_]](implicit E: ParserError[F], S: ParserState[F]): F[Seq[String]] =
+  def dropFirstArg[F[_]: Monad](implicit E: ParserError[F], S: ParserState[F]): F[Seq[String]] =
     for {
       xs <- S.get
       _  <- if (xs.isEmpty) notEnoughArgsErrorF else S.set(xs.tail)
@@ -84,23 +84,23 @@ object ScammanderHelper {
 
   def firstArgOpt[F[_]](implicit S: ParserState[F]): F[Option[RawCmdArg]] = S.inspect(_.headOption)
 
-  def firstArg[F[_]: ParserState](implicit E: ParserError[F]): F[RawCmdArg] =
-    E.rethrow(firstArgOpt.map(_.filter(_.content.nonEmpty).toRight(notEnoughArgsNel)))
+  def firstArg[F[_]: Monad: ParserState](implicit E: ParserError[F]): F[RawCmdArg] =
+    firstArgOpt.map(_.filter(_.content.nonEmpty).toRight(notEnoughArgsNel)).flatMap(_.fold(E.raise, _.pure))
 
-  def firstArgAndDrop[F[_]: ParserState: ParserError]: F[RawCmdArg] = firstArg <* dropFirstArg
+  def firstArgAndDrop[F[_]: Monad: ParserState: ParserError]: F[RawCmdArg] = firstArg <* dropFirstArg
 
-  def withFallbackSuggestions[F[_]](first: F[Seq[String]], second: F[Seq[String]])(
+  def withFallbackSuggestions[F[_]: Monad](first: F[Seq[String]], second: F[Seq[String]])(
       implicit E: ParserError[F]
   ): F[Seq[String]] =
     for {
       fSuggestions <- first
-      res          <- E.attemptT(second).getOrElse(fSuggestions)
+      res          <- E.attempt(second).map(_.getOrElse(fSuggestions))
     } yield res
 
   def withFallback[F[_], A](first: F[A], second: F[A])(implicit E: ParserError[F]): F[A] =
-    E.handleErrorWith(first) { e1 =>
-      E.handleErrorWith(second) { e2 =>
-        E.raiseError(e1 ::: e2)
+    E.handleWith(first) { e1 =>
+      E.handleWith(second) { e2 =>
+        E.raise(e1 ::: e2)
       }
     }
 
@@ -108,7 +108,7 @@ object ScammanderHelper {
     * Returns the suggestions for a command given the argument list and
     * all the possible string suggestions.
     */
-  def suggestions[F[_], E](parse: F[E], choices: Eval[Iterable[String]])(
+  def suggestions[F[_]: Monad, E](parse: F[E], choices: Eval[Iterable[String]])(
       implicit E: ParserError[F],
       S: ParserState[F]
   ): F[Seq[String]] =
@@ -135,14 +135,14 @@ object ScammanderHelper {
     * Returns the suggestions for a command given the argument list and
     * all the possible suggestions.
     */
-  def suggestionsNamed[F[_]: ParserError: ParserState, A, E](parse: F[E], choices: Eval[Iterable[A]])(
+  def suggestionsNamed[F[_]: Monad: ParserError: ParserState, A, E](parse: F[E], choices: Eval[Iterable[A]])(
       implicit named: HasName[A],
   ): F[Seq[String]] = suggestions(parse, choices.map(_.map((named.apply _).andThen(_.toLowercaseRoot))))
 
   /**
     * Parse a single paramter given the current argument list, and a map of the valid choices.
     */
-  def parse[F[_]: ParserState, A](name: String, choices: Map[String, A])(
+  def parse[F[_]: Monad: ParserState, A](name: String, choices: Map[String, A])(
       implicit E: ParserError[F]
   ): F[A] = {
     def usageError(arg: RawCmdArg) =
@@ -154,14 +154,14 @@ object ScammanderHelper {
         .filterKeys(_.equalsIgnoreCase(arg.content))
         .headOption
         .map(_._2)
-      res <- E.fromOption(optValue, usageError(arg))
+      res <- optValue.fold(E.raise[A](usageError(arg)))(_.pure)
     } yield res
   }
 
   /**
     * Parse a paramter given the current argument list, and a list of the valid choices.
     */
-  def parse[F[_]: ParserState: ParserError, A](name: String, choices: Iterable[A])(
+  def parse[F[_]: Monad: ParserState: ParserError, A](name: String, choices: Iterable[A])(
       implicit named: HasName[A],
   ): F[A] = parse(name, choices.map(obj => named(obj).toLowercaseRoot -> obj).toMap)
 
@@ -169,7 +169,7 @@ object ScammanderHelper {
     * Parse a set for a paramter given the current argument list, and a map of the valid choices.
     */
   //Based on PatternMatchingCommandElement in Sponge
-  def parseMany[F[_], A](name: String, choices: Map[String, A])(
+  def parseMany[F[_]: Monad, A](name: String, choices: Map[String, A])(
       implicit E: ParserError[F],
       S: ParserState[F]
   ): F[Set[A]] = {
@@ -193,7 +193,7 @@ object ScammanderHelper {
           if (filteredChoices.nonEmpty)
             filteredChoices.values.toSet.pure
           else
-            E.raiseError(NonEmptyList.one(Result.usageError(s"$unformattedPattern is not a valid $name", pos)))
+            E.raise(NonEmptyList.one(Result.usageError(s"$unformattedPattern is not a valid $name", pos)))
         }
     } yield res
   }
@@ -201,7 +201,7 @@ object ScammanderHelper {
   /**
     * Parse a set for a paramter given the current argument list, and a list of the valid choices.
     */
-  def parseMany[F[_]: ParserState: ParserError, A](
+  def parseMany[F[_]: Monad: ParserState: ParserError, A](
       name: String,
       choices: Iterable[A]
   )(implicit named: HasName[A]): F[Set[A]] =

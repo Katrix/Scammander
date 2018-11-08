@@ -2,6 +2,7 @@ package net.katsstuff.scammander
 
 import scala.language.higherKinds
 
+import cats.Monad
 import net.katsstuff.scammander.ScammanderTypes.{ParserError, ParserState}
 
 /**
@@ -9,17 +10,17 @@ import net.katsstuff.scammander.ScammanderTypes.{ParserError, ParserState}
   */
 trait ComplexCommand[G[_], RootSender, RunExtra, TabExtra, ResultTpe, StaticChildCommand] {
 
-  def runRaw[F[_]: ParserState: ParserError](
+  def runRaw[F[_]: Monad: ParserState: ParserError](
       source: RootSender,
       extra: RunExtra
   ): F[G[CommandSuccess[ResultTpe]]]
 
-  def suggestions[F[_]: ParserState: ParserError](
+  def suggestions[F[_]: Monad: ParserState: ParserError](
       source: RootSender,
       extra: TabExtra
   ): F[Seq[String]]
 
-  def usage[F[_]: ParserError](source: RootSender): F[String]
+  def usage[F[_]: Monad: ParserError](source: RootSender): F[String]
 
   def children: Set[ComplexChildCommand[StaticChildCommand]] =
     Set.empty
