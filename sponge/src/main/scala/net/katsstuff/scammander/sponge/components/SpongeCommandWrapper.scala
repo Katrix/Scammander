@@ -8,16 +8,16 @@ import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 
-import cats.{Eval, Monad}
 import cats.arrow.FunctionK
 import cats.data.{EitherT, NonEmptyList, StateT}
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.instances.either._
 import cats.instances.vector._
-import cats.mtl.{DefaultMonadState, MonadState}
 import cats.mtl.instances.all._
+import cats.mtl.{DefaultMonadState, MonadState}
 import cats.syntax.all._
+import cats.{Eval, Monad}
 import net.katsstuff.scammander.ScammanderTypes.{CommandFailureNEL, ParserError}
 import net.katsstuff.scammander._
 import org.spongepowered.api.Sponge

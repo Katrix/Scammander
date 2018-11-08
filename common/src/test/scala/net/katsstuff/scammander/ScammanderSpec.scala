@@ -5,8 +5,8 @@ import cats.data.{EitherT, StateT}
 import cats.effect.IO
 import cats.effect.concurrent.Ref
 import cats.instances.either._
-import cats.mtl.{DefaultMonadState, MonadState}
 import cats.mtl.instances.all._
+import cats.mtl.{DefaultMonadState, MonadState}
 import org.scalatest.{Assertion, FunSuite, Matchers}
 
 class ScammanderSpec extends FunSuite with Matchers with ScammanderBaseAll {

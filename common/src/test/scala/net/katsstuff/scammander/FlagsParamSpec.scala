@@ -1,7 +1,6 @@
 package net.katsstuff.scammander
 
-import shapeless.{Witness => W}
-import shapeless._
+import shapeless.{Witness => W, _}
 
 class FlagsParamSpec extends ScammanderSpec {
 
