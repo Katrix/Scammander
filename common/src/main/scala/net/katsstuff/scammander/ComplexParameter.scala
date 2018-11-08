@@ -4,6 +4,7 @@ import scala.language.higherKinds
 
 import scala.annotation.implicitNotFound
 
+import cats.effect.Async
 import cats.syntax.all._
 import cats.{Functor, Monad}
 import net.katsstuff.scammander.ScammanderTypes._
@@ -34,7 +35,7 @@ trait ComplexParameter[A, RootSender, RunExtra, TabExtra] {
     * @param extra Extra platform specific info about the command.
     * @return A list of the remaining arguments, and the suggestions.
     */
-  def suggestions[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]]
+  def suggestions[F[_]: Async: ParserState: ParserError](source: RootSender, extra: TabExtra): F[Seq[String]]
 
   /**
     * The usage for this command.
@@ -60,7 +61,7 @@ object ComplexParameter {
           override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[B] =
             fa.parse(source, extra).map(f)
 
-          override def suggestions[F[_]: Monad: ParserState: ParserError](
+          override def suggestions[F[_]: Async: ParserState: ParserError](
               source: RootSender,
               extra: TabExtra
           ): F[Seq[String]] =

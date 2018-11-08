@@ -23,6 +23,7 @@ package net.katsstuff.scammander
 import scala.language.higherKinds
 
 import cats.Monad
+import cats.effect.Async
 import cats.syntax.all._
 import shapeless._
 import shapeless.labelled.FieldType
@@ -65,7 +66,7 @@ trait ParameterLabelledDeriver extends ParameterDeriver { self: ScammanderBase =
           t <- tParam.value.parse(source, extra)
         } yield labelled.field[HK](h) :: t
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] =
@@ -101,7 +102,7 @@ trait ParameterLabelledDeriver extends ParameterDeriver { self: ScammanderBase =
         ScammanderHelper.withFallback(hParse, tParse)
       }
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] = {

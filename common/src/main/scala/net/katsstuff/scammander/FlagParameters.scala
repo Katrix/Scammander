@@ -26,6 +26,7 @@ import java.util.Locale
 
 import cats.Monad
 import cats.data.NonEmptyList
+import cats.effect.Async
 import cats.syntax.all._
 import shapeless.Witness
 
@@ -64,7 +65,7 @@ trait FlagParameters { self: ScammanderBase =>
         }
       }
 
-    override def suggestions[F[_]: Monad](
+    override def suggestions[F[_]: Async](
         source: RootSender,
         extra: TabExtra
     )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
@@ -119,7 +120,7 @@ trait FlagParameters { self: ScammanderBase =>
           }
         }
 
-      override def suggestions[F[_]: Monad](
+      override def suggestions[F[_]: Async](
           source: RootSender,
           extra: TabExtra
       )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
@@ -161,7 +162,7 @@ trait FlagParameters { self: ScammanderBase =>
         t2 <- paramParam.parse(source, extra)
       } yield Flags(t1, t2)
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =

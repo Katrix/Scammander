@@ -59,6 +59,7 @@ lazy val common = project.settings(
   libraryDependencies += "com.chuusai"   %% "shapeless"     % "2.3.3",
   libraryDependencies += "org.typelevel" %% "cats-core"     % "1.4.0",
   libraryDependencies += "org.typelevel" %% "cats-mtl-core" % "0.4.0",
+  libraryDependencies += "org.typelevel" %% "cats-effect"   % "1.0.0",
   libraryDependencies += "org.scalatest" %% "scalatest"     % "3.0.4" % Test
 )
 

@@ -23,6 +23,7 @@ package net.katsstuff.scammander
 import scala.language.higherKinds
 
 import cats.Monad
+import cats.effect.Async
 import cats.syntax.all._
 import shapeless._
 
@@ -40,7 +41,7 @@ trait ParameterDeriver { self: ScammanderBase =>
         t <- tParam.value.parse(source, extra)
       } yield h :: t
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -65,7 +66,7 @@ trait ParameterDeriver { self: ScammanderBase =>
     override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[HNil] =
       (HNil: HNil).pure
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -88,7 +89,7 @@ trait ParameterDeriver { self: ScammanderBase =>
         ScammanderHelper.withFallback(hParse, tParse)
       }
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] = {
@@ -114,7 +115,7 @@ trait ParameterDeriver { self: ScammanderBase =>
     override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[CNil] =
       ScammanderHelper.getPos.flatMap(pos => Result.syntaxErrorF("Could not parse argument", pos))
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =

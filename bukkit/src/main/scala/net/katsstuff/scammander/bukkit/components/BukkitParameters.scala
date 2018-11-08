@@ -4,6 +4,7 @@ import scala.language.higherKinds
 
 import scala.collection.JavaConverters._
 
+import cats.effect.Async
 import cats.syntax.all._
 import cats.{Eval, Monad}
 import net.katsstuff.scammander.{HelperParameters, NormalParameters, ScammanderHelper}
@@ -45,7 +46,7 @@ trait BukkitParameters {
       if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
       else ScammanderHelper.getPos.flatMap(permError[F, NeedPermission[Perm, A]])
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] =
@@ -75,7 +76,7 @@ trait BukkitParameters {
       ScammanderHelper.withFallback(normalNames, uuidPlayers)
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] =
@@ -110,7 +111,7 @@ trait BukkitParameters {
       ScammanderHelper.withFallback(ScammanderHelper.withFallback(players, users), uuidUsers)
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] = {
@@ -145,7 +146,7 @@ trait BukkitParameters {
       } yield new BukkitVector(x, y, z)
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSender,
         extra: BukkitExtra
     ): F[Seq[String]] =

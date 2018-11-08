@@ -10,6 +10,7 @@ import java.util.concurrent.Callable
 import scala.collection.JavaConverters._
 import scala.reflect.ClassTag
 
+import cats.effect.Async
 import cats.syntax.all._
 import cats.{Eval, Monad}
 import com.flowpowered.math.vector.Vector3d
@@ -60,7 +61,7 @@ trait SpongeParameter {
         if (source.hasPermission(perm)) param.parse(source, extra).map(NeedPermission.apply)
         else ScammanderHelper.getPos.flatMap(permError[F, NeedPermission[S, A]])
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: CommandSource,
           extra: Option[Location[World]]
       ): F[Seq[String]] =
@@ -99,7 +100,7 @@ trait SpongeParameter {
         _ <- ScammanderHelper.dropFirstArg[F]
       } yield res
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.firstArgOpt.flatMap {
@@ -134,7 +135,7 @@ trait SpongeParameter {
         }
       }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] =
@@ -170,7 +171,7 @@ trait SpongeParameter {
     override def parse[F[_]: Monad: ParserState: ParserError](source: CommandSource, extra: Unit): F[Set[User]] =
       ScammanderHelper.withFallback(parsePlayers(source), parseUsers)
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] =
@@ -199,7 +200,7 @@ trait SpongeParameter {
       } yield Vector3d.from(x, t, z)
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] =
@@ -275,7 +276,7 @@ trait SpongeParameter {
         }
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.firstArgOpt.flatMap { cmdArg =>
@@ -328,7 +329,7 @@ trait SpongeParameter {
       ScammanderHelper.withFallback(fromIp, fromPlayer)
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.dropFirstArg[F]
@@ -358,7 +359,7 @@ trait SpongeParameter {
       } yield res
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: CommandSource,
         extra: Option[Location[World]]
     ): F[Seq[String]] = ScammanderHelper.dropFirstArg[F]

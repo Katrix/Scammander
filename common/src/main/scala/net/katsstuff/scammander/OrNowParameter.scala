@@ -5,6 +5,7 @@ import scala.language.higherKinds
 import java.time.LocalDateTime
 
 import cats.Monad
+import cats.effect.Async
 import cats.syntax.all._
 
 trait OrNowParameter {
@@ -27,7 +28,7 @@ trait OrNowParameter {
         .withFallback(dateTimeParam.parse(source, extra), LocalDateTime.now().pure)
         .map(Or.apply)
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =

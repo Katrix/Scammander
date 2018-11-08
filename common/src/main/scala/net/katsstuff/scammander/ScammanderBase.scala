@@ -24,6 +24,7 @@ import scala.language.higherKinds
 
 import java.util.Locale
 
+import cats.effect.Async
 import cats.syntax.all._
 import cats.{Id => _, catsInstancesForId => _, _}
 import net.katsstuff.scammander
@@ -90,7 +91,7 @@ trait ScammanderBase extends ScammanderTypes {
         parsed <- param.parse(source, extra)
       } yield runCmd(sender, extra, parsed)
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] = param.suggestions(source, extra)
@@ -169,7 +170,7 @@ trait ScammanderBase extends ScammanderTypes {
 
     override def name: String = param.name
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -205,7 +206,7 @@ trait ScammanderBase extends ScammanderTypes {
       override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Set[A]] =
         ScammanderHelper.parseMany(name, choices)
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] =
@@ -227,7 +228,7 @@ trait ScammanderBase extends ScammanderTypes {
       override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[A] =
         ScammanderHelper.parse(choiceName, names.map(_ -> obj).toMap)
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] =
@@ -243,7 +244,7 @@ trait ScammanderBase extends ScammanderTypes {
       override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Set[A]] =
         ScammanderHelper.parseMany[F, A](choiceName, choices)
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] =
@@ -330,7 +331,7 @@ trait ScammanderBase extends ScammanderTypes {
       ): F[DynamicCommand[Args, Identifier, Sender, Param]] =
         ScammanderHelper.parse(name, cmd.names.map(_ -> dynamic).toMap)
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] =
@@ -346,7 +347,7 @@ trait ScammanderBase extends ScammanderTypes {
         extra: RunExtra
     )(implicit S: ParserState[F], E: ParserError[F]): F[List[RawCmdArg]] = S.get
 
-    override def suggestions[F[_]: Monad](
+    override def suggestions[F[_]: Async](
         source: RootSender,
         extra: TabExtra
     )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
@@ -365,7 +366,7 @@ trait ScammanderBase extends ScammanderTypes {
         else (NotUsed: NotUsed).pure
       }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =

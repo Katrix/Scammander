@@ -7,11 +7,16 @@ import java.util
 import scala.collection.JavaConverters._
 import scala.util.control.NonFatal
 
-import cats.Eval
 import cats.arrow.FunctionK
-import cats.data.{NonEmptyList, StateT}
+import cats.data.{EitherT, NonEmptyList, StateT}
+import cats.effect.IO
+import cats.effect.concurrent.Ref
 import cats.instances.either._
+import cats.syntax.all._
+import cats.instances.vector._
 import cats.mtl.instances.all._
+import cats.mtl.{DefaultMonadState, MonadState}
+import cats.{Eval, Monad}
 import net.katsstuff.scammander.ScammanderTypes.{CommandFailureNEL, ParserError}
 import net.katsstuff.scammander._
 import org.bukkit.ChatColor
@@ -23,14 +28,27 @@ case class BukkitCommandWrapper[G[_]](
     runG: FunctionK[G, Either[CommandFailureNEL, ?]]
 ) extends TabExecutor {
 
-  type Result[A] = Either[CommandFailureNEL, A]
-  type Parser[A] = StateT[Result, List[RawCmdArg], A]
+  private type Result[A] = Either[CommandFailureNEL, A]
+  private type Parser[A] = StateT[Result, List[RawCmdArg], A]
+
+  private type ResultIO[A] = EitherT[IO, CommandFailureNEL, A]
 
   //At least in the tests, this recurse for ever if we don't construct it manually
   implicit private val E: ParserError[Parser] = raiseInd(
     stateMonadLayerControl,
     handleEither
   )
+
+  private def ioState[S](start: S): IO[MonadState[IO, S]] =
+    Ref[IO]
+      .of(start)
+      .map { ref =>
+        new DefaultMonadState[IO, S] {
+          override val monad: Monad[IO]    = IO.ioEffect
+          override def get: IO[S]          = ref.get
+          override def set(s: S): IO[Unit] = ref.set(s)
+        }
+      }
 
   override def onCommand(
       source: CommandSender,
@@ -116,14 +134,17 @@ case class BukkitCommandWrapper[G[_]](
           if (isParsed) Right(true) else Left(NonEmptyList.one(CommandError("Not child")))
         }
         val childSuggestions =
-          ScammanderHelper.suggestions[Parser, Boolean](parse, Eval.now(command.childrenMap.keys)).runA(parsedArgs)
-        val paramSuggestions = command.suggestions[Parser](sender, extra).runA(parsedArgs)
-        val ret = childSuggestions match {
-          case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
-          case Left(_)            => paramSuggestions
-        }
+          ScammanderHelper
+            .suggestions[Parser, Boolean](parse, Eval.now(command.childrenMap.keys))
+            .runA(parsedArgs)
+            .map(_.toVector)
 
-        ret.getOrElse(Nil).asJava
+        ioState(parsedArgs)
+          .flatMap(implicit state => command.suggestions[ResultIO](sender, extra).map(_.toVector).value)
+          .map(_ |+| childSuggestions)
+          .map(_.getOrElse(Nil))
+          .map(_.asJava)
+          .unsafeRunSync() //TODO: Don't run sync once we update to 1.13
       }
     } catch {
       case NonFatal(e) =>

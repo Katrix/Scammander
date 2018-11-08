@@ -29,6 +29,7 @@ import java.util.{Locale, UUID}
 
 import scala.util.Try
 
+import cats.effect.Async
 import cats.syntax.all._
 import cats.{Eval, Monad}
 
@@ -47,7 +48,7 @@ trait NormalParameters { self: ScammanderBase =>
         }
       } yield res
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -62,7 +63,7 @@ trait NormalParameters { self: ScammanderBase =>
       override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[A] =
         ScammanderHelper.firstArgAndDrop.map(arg => parser(arg.content))
 
-      override def suggestions[F[_]: Monad: ParserState: ParserError](
+      override def suggestions[F[_]: Async: ParserState: ParserError](
           source: RootSender,
           extra: TabExtra
       ): F[Seq[String]] =
@@ -83,7 +84,7 @@ trait NormalParameters { self: ScammanderBase =>
 
     override def parse[F[_]: Monad: ParserState: ParserError](source: RootSender, extra: RunExtra): F[Unit] = ().pure
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -108,7 +109,7 @@ trait NormalParameters { self: ScammanderBase =>
         }
       } yield res
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -145,7 +146,7 @@ trait NormalParameters { self: ScammanderBase =>
         }
       } yield res
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
@@ -185,7 +186,7 @@ trait NormalParameters { self: ScammanderBase =>
         }
       } yield res
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =

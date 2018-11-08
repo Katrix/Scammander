@@ -8,10 +8,14 @@ import javax.annotation.Nullable
 
 import scala.collection.JavaConverters._
 
-import cats.Eval
+import cats.{Eval, Monad}
 import cats.arrow.FunctionK
-import cats.data.{NonEmptyList, StateT}
+import cats.data.{EitherT, NonEmptyList, StateT}
+import cats.effect.IO
+import cats.effect.concurrent.Ref
 import cats.instances.either._
+import cats.instances.vector._
+import cats.mtl.{DefaultMonadState, MonadState}
 import cats.mtl.instances.all._
 import cats.syntax.all._
 import net.katsstuff.scammander.ScammanderTypes.{CommandFailureNEL, ParserError}
@@ -29,14 +33,27 @@ case class SpongeCommandWrapper[G[_]](
 ) extends CommandCallable
     with ComplexStaticChildCommand[G, CommandSource, Unit, Option[Location[World]], Int, SpongeCommandWrapper[G]] {
 
-  type Result[A] = Either[CommandFailureNEL, A]
-  type Parser[A] = StateT[Result, List[RawCmdArg], A]
+  private type Result[A] = Either[CommandFailureNEL, A]
+  private type Parser[A] = StateT[Result, List[RawCmdArg], A]
+
+  private type ResultIO[A] = EitherT[IO, CommandFailureNEL, A]
 
   //At least in the tests, this recurse for ever if we don't construct it manually
   implicit private val E: ParserError[Parser] = raiseInd(
     stateMonadLayerControl,
     handleEither
   )
+
+  private def ioState[S](start: S): IO[MonadState[IO, S]] =
+    Ref[IO]
+      .of(start)
+      .map { ref =>
+        new DefaultMonadState[IO, S] {
+          override val monad: Monad[IO]    = IO.ioEffect
+          override def get: IO[S]          = ref.get
+          override def set(s: S): IO[Unit] = ref.set(s)
+        }
+      }
 
   override def process(source: CommandSource, arguments: String): CommandResult = {
     val args = ScammanderHelper.stringToRawArgsQuoted(arguments)
@@ -97,17 +114,21 @@ case class SpongeCommandWrapper[G[_]](
         val isParsed =
           if (command.childrenMap.contains(arg.content) && headCount(arg.content) > 1) false
           else command.childrenMap.keys.exists(_.equalsIgnoreCase(arg.content))
-        if (isParsed) true.pure else NonEmptyList.one(CommandError("Not child")).raiseError
-      }
-      val childSuggestions =
-        ScammanderHelper.suggestions[Parser, Boolean](parse, Eval.now(command.childrenMap.keys)).runA(args)
-      val paramSuggestions = command.suggestions[Parser](source, Option(targetPosition)).runA(args)
-      val ret = childSuggestions match {
-        case Right(suggestions) => paramSuggestions.map(suggestions ++ _)
-        case Left(_)            => paramSuggestions
+        if (isParsed) true.pure[Result] else NonEmptyList.one(CommandError("Not child")).raiseError
       }
 
-      ret.getOrElse(Nil).asJava
+      val childSuggestions =
+        ScammanderHelper
+          .suggestions[Parser, Boolean](parse, Eval.now(command.childrenMap.keys))
+          .runA(args)
+          .map(_.toVector)
+
+      ioState(args)
+        .flatMap(implicit state => command.suggestions[ResultIO](source, Option(targetPosition)).map(_.toVector).value)
+        .map(_ |+| childSuggestions)
+        .map(_.getOrElse(Nil))
+        .map(_.asJava)
+        .unsafeRunSync() //TODO: Don't run sync once we update to 1.13
     }
   }
 

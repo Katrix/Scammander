@@ -1,7 +1,11 @@
 package net.katsstuff.scammander
 
-import cats.data.StateT
+import cats.Monad
+import cats.data.{EitherT, StateT}
+import cats.effect.IO
+import cats.effect.concurrent.Ref
 import cats.instances.either._
+import cats.mtl.{DefaultMonadState, MonadState}
 import cats.mtl.instances.all._
 import org.scalatest.{Assertion, FunSuite, Matchers}
 
@@ -25,6 +29,19 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderBaseAll {
     stateMonadLayerControl,
     handleEither
   )
+
+  type ResultIO[A] = EitherT[IO, CommandFailureNEL, A]
+
+  def ioState[S](start: S): IO[MonadState[IO, S]] =
+    Ref[IO]
+      .of(start)
+      .map { ref =>
+        new DefaultMonadState[IO, S] {
+          override val monad: Monad[IO]    = IO.ioEffect
+          override def get: IO[S]          = ref.get
+          override def set(s: S): IO[Unit] = ref.set(s)
+        }
+      }
 
   case class MyObj(name: String, i: Int)
 
@@ -69,18 +86,21 @@ class ScammanderSpec extends FunSuite with Matchers with ScammanderBaseAll {
   }
 
   def suggestions[A](arguments: String)(implicit param: Parameter[A]): Seq[String] = {
-    val either = param.suggestions[Parser]((), ()).run(mkArgs(arguments))
+    val either =
+      ioState(mkArgs(arguments)).flatMap(implicit state => param.suggestions[ResultIO]((), ()).value).unsafeRunSync()
     assert(either.isRight)
-    either.right.get._2
+    either.right.get
   }
 
   def noSuggestions[A](arguments: String)(implicit param: Parameter[A]): Assertion = {
-    val either = param.suggestions[Parser]((), ()).run(mkArgs(arguments)).map(_._2)
+    val either =
+      ioState(mkArgs(arguments)).flatMap(implicit state => param.suggestions[ResultIO]((), ()).value).unsafeRunSync()
     assert(either.contains(Nil))
   }
 
   def errorSuggestions[A](arguments: String)(implicit param: Parameter[A]): Assertion = {
-    val either = param.suggestions[Parser]((), ()).run(mkArgs(arguments)).map(_._2)
+    val either =
+      ioState(mkArgs(arguments)).flatMap(implicit state => param.suggestions[ResultIO]((), ()).value).unsafeRunSync()
     assert(either.isLeft)
   }
 }

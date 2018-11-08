@@ -24,6 +24,7 @@ import scala.language.higherKinds
 
 import cats.Monad
 import cats.data.NonEmptyList
+import cats.effect.Async
 import cats.syntax.all._
 
 trait HelperParameters { self: ScammanderBase =>
@@ -80,7 +81,7 @@ trait HelperParameters { self: ScammanderBase =>
             ScammanderHelper.notEnoughArgsErrorF[F, RemainingAsString]
         } <* S.set(Nil)
 
-    override def suggestions[F[_]: Monad](
+    override def suggestions[F[_]: Async](
         source: RootSender,
         extra: TabExtra
     )(implicit S: ParserState[F], E: ParserError[F]): F[Seq[String]] =
@@ -116,7 +117,7 @@ trait HelperParameters { self: ScammanderBase =>
         override def suggestions[F[_]](
             source: RootSender,
             extra: TabExtra
-        )(implicit F: Monad[F], S: ParserState[F], E: ParserError[F]): F[Seq[String]] = {
+        )(implicit F: Async[F], S: ParserState[F], E: ParserError[F]): F[Seq[String]] = {
           import cats.instances.vector._
           val mkSuggestions = param.suggestions[F](source, extra)
           val stillMore     = S.get.map(_.nonEmpty)
@@ -157,7 +158,7 @@ trait HelperParameters { self: ScammanderBase =>
         override def suggestions[F[_]](
             source: RootSender,
             extra: TabExtra
-        )(implicit F: Monad[F], S: ParserState[F], E: ParserError[F]): F[Seq[String]] = {
+        )(implicit F: Async[F], S: ParserState[F], E: ParserError[F]): F[Seq[String]] = {
           import cats.instances.vector._
           val mkSuggestions = param.suggestions[F](source, extra)
           val stillMore     = S.get.map(_.nonEmpty)
@@ -178,7 +179,7 @@ trait HelperParameters { self: ScammanderBase =>
       ScammanderHelper.withFallback(parse, (None: Option[A]).pure)
     }
 
-    override def suggestions[F[_]: Monad: ParserState: ParserError](
+    override def suggestions[F[_]: Async: ParserState: ParserError](
         source: RootSender,
         extra: TabExtra
     ): F[Seq[String]] =
