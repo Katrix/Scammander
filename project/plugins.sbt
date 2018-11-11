@@ -1,1 +1,1 @@
-addSbtPlugin("net.katsstuff" % "sbt-spongyinfo" % "1.3")
+addSbtPlugin("net.katsstuff" % "sbt-spongyinfo" % "1.4")
