@@ -21,7 +21,7 @@ trait HelpCommands {
   def helpCommand(title: Title, commands: => Set[ChildCommand])(
       implicit G: MonadError[G, String]
   ): Command[RootSender, ZeroOrMore[String]] =
-    Command.simple[ZeroOrMore[String]] { (source, extra, arg) =>
+    Command.simple[ZeroOrMore[String]] { (source, _, arg) =>
       val topCommandMap: Map[String, StaticChildCommand] =
         commands.flatMap(child => child.aliases.map(alias => alias -> child.command)).toMap
 

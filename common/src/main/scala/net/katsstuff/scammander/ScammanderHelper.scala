@@ -136,7 +136,7 @@ object ScammanderHelper {
     * all the possible suggestions.
     */
   def suggestionsNamed[F[_]: Monad: ParserError: ParserState, A, E](parse: F[E], choices: Eval[Iterable[A]])(
-      implicit named: HasName[A],
+      implicit named: HasName[A]
   ): F[Seq[String]] = suggestions(parse, choices.map(_.map((named.apply _).andThen(_.toLowercaseRoot))))
 
   /**
@@ -162,7 +162,7 @@ object ScammanderHelper {
     * Parse a paramter given the current argument list, and a list of the valid choices.
     */
   def parse[F[_]: Monad: ParserState: ParserError, A](name: String, choices: Iterable[A])(
-      implicit named: HasName[A],
+      implicit named: HasName[A]
   ): F[A] = parse(name, choices.map(obj => named(obj).toLowercaseRoot -> obj).toMap)
 
   /**

@@ -1,7 +1,7 @@
 lazy val commonSettings = Seq(
   organization := "net.katsstuff",
-  scalaVersion := "2.12.6",
-  crossScalaVersions := Seq("2.11.11", scalaVersion.value),
+  scalaVersion := "2.12.7",
+  crossScalaVersions := Seq("2.11.12", scalaVersion.value),
   scalacOptions ++= Seq(
     "-deprecation",
     "-encoding",
@@ -17,9 +17,11 @@ lazy val commonSettings = Seq(
     "-Ywarn-infer-any",
     "-Ywarn-nullary-override",
     "-Ywarn-nullary-unit",
-    "-Ywarn-unused"
+    "-Ywarn-unused",
+    "-target:jvm-1.8"
   ),
   addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6"),
+  updateOptions := updateOptions.value.withLatestSnapshots(false), //Remember to comment out this line now and then
   //Fixes repository not specified error
   publishTo := {
     val nexus = "https://oss.sonatype.org/"
