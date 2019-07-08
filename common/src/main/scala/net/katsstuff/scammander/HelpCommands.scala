@@ -1,6 +1,6 @@
 package net.katsstuff.scammander
 
-import cats.MonadError
+import cats.Monad
 import cats.data.StateT
 import cats.syntax.all._
 
@@ -19,7 +19,8 @@ trait HelpCommands {
   ): G[CommandSuccess]
 
   def helpCommand(title: Title, commands: => Set[ChildCommand])(
-      implicit G: MonadError[G, String]
+      implicit G: Monad[G],
+      E: ParserError[G]
   ): Command[RootSender, ZeroOrMore[String]] =
     Command.simple[ZeroOrMore[String]] { (source, _, arg) =>
       val topCommandMap: Map[String, StaticChildCommand] =
@@ -31,7 +32,7 @@ trait HelpCommands {
       ): StateT[G, List[String], StaticChildCommand] = StateT { acc =>
         commandMap
           .get(name)
-          .fold(G.raiseError[StaticChildCommand](s"No command named $name"))(_.pure[G])
+          .fold(E.raise[StaticChildCommand](Result.errorNel(s"No command named $name")))(_.pure[G])
           .map(cmd => (name :: acc) -> cmd)
       }
 
