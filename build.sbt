@@ -1,6 +1,6 @@
 lazy val commonSettings = Seq(
   organization := "net.katsstuff",
-  scalaVersion := "2.12.7",
+  scalaVersion := "2.12.8",
   crossScalaVersions := Seq("2.11.12", scalaVersion.value),
   scalacOptions ++= Seq(
     "-deprecation",
@@ -20,8 +20,8 @@ lazy val commonSettings = Seq(
     "-Ywarn-unused",
     "-target:jvm-1.8"
   ),
-  addCompilerPlugin("org.spire-math" %% "kind-projector" % "0.9.6"),
-  updateOptions := updateOptions.value.withLatestSnapshots(false), //Remember to comment out this line now and then
+  addCompilerPlugin("org.typelevel" %% "kind-projector" % "0.10.3"),
+  //updateOptions := updateOptions.value.withLatestSnapshots(false), //Remember to comment out this line now and then
   //Fixes repository not specified error
   publishTo := {
     val nexus = "https://oss.sonatype.org/"
@@ -51,7 +51,7 @@ lazy val publishSettings = Seq(
 
 lazy val noPublishSettings = Seq(publish := {}, publishLocal := {}, publishArtifact := false)
 
-lazy val scammanderVersion = "0.6"
+lazy val scammanderVersion = "0.7.0"
 
 lazy val common = project.settings(
   commonSettings,
@@ -59,7 +59,7 @@ lazy val common = project.settings(
   name := "scammander",
   version := scammanderVersion,
   libraryDependencies += "com.chuusai"   %% "shapeless"     % "2.3.3",
-  libraryDependencies += "org.typelevel" %% "cats-core"     % "1.4.0",
+  libraryDependencies += "org.typelevel" %% "cats-core"     % "1.6.0",
   libraryDependencies += "org.typelevel" %% "cats-mtl-core" % "0.4.0",
   libraryDependencies += "org.typelevel" %% "cats-effect"   % "1.0.0",
   libraryDependencies += "org.scalatest" %% "scalatest"     % "3.0.4" % Test
@@ -98,12 +98,7 @@ lazy val scammanderRoot = project
   .in(file("."))
   .aggregate(common, sponge5, sponge6, sponge7, bukkit)
   .settings(
-    noPublishSettings,
-    //Fixes repository not specified error
-    publishTo := {
-      val nexus = "https://oss.sonatype.org/"
-      if (isSnapshot.value) Some("snapshots" at nexus + "content/repositories/snapshots")
-      else Some("releases" at nexus + "service/local/staging/deploy/maven2")
-    }
+    commonSettings,
+    noPublishSettings
   )
   .enablePlugins(ScalaUnidocPlugin)
