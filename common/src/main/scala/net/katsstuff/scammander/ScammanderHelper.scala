@@ -23,7 +23,6 @@ package net.katsstuff.scammander
 import scala.language.higherKinds
 
 import java.util.Locale
-import java.util.regex.Pattern
 
 import cats.data.NonEmptyList
 import cats.syntax.all._
@@ -123,7 +122,7 @@ object ScammanderHelper {
       val evaluatedChoices = choices.value
       if (content.isEmpty) evaluatedChoices.toSeq
       else {
-        val startsWith = evaluatedChoices.filter(_.startsWith(content)).toSeq
+        val startsWith = evaluatedChoices.filter(s => content.regionMatches(true, 0, s, 0, s.length)).toSeq
         if (startsWith.lengthCompare(1) == 0 && evaluatedChoices.exists(_.equalsIgnoreCase(content)))
           Nil
         else
@@ -172,31 +171,22 @@ object ScammanderHelper {
   def parseMany[F[_]: Monad, A](name: String, choices: Map[String, A])(
       implicit E: ParserError[F],
       S: ParserState[F]
-  ): F[Set[A]] = {
-    def formattedPattern(input: String) = {
-      // Anchor matches to the beginning -- this lets us use find()
-      val usedInput = if (!input.startsWith("^")) s"^$input" else input
-      Pattern.compile(usedInput, Pattern.CASE_INSENSITIVE)
-    }
-
+  ): F[Set[A]] =
     for {
       arg <- firstArgAndDrop
-      RawCmdArg(pos, _, unformattedPattern) = arg
-
-      pattern         = formattedPattern(unformattedPattern)
-      filteredChoices = choices.filterKeys(k => pattern.matcher(k).find())
+      RawCmdArg(pos, _, content) = arg
+      filteredChoices            = choices.filterKeys(s => content.regionMatches(true, 0, s, 0, s.length))
       res <- filteredChoices
         .collectFirst {
-          case (k, v) if k.equalsIgnoreCase(unformattedPattern) => Set(v).pure
+          case (k, v) if k.equalsIgnoreCase(content) => Set(v).pure
         }
         .getOrElse {
           if (filteredChoices.nonEmpty)
             filteredChoices.values.toSet.pure
           else
-            E.raise(NonEmptyList.one(Result.usageError(s"$unformattedPattern is not a valid $name", pos)))
+            E.raise(NonEmptyList.one(Result.usageError(s"$content is not a valid $name", pos)))
         }
     } yield res
-  }
 
   /**
     * Parse a set for a paramter given the current argument list, and a list of the valid choices.
